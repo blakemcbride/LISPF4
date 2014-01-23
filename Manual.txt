@@ -1,0 +1,2770 @@
+******DOC         (LISPF4 DOCUMENTATION)
+INTRODUCTION
+ 
+LISP F4 is a LISP interpreter written in FORTRAN IV.  The interpreter
+is (almost) a subset of INTERLISP.  LISP F4 originates from LISP 1.5
+through LISP F1 to LISP F3.  LISP F4 is about 3 - 10 times more
+efficient then LISP F1 and has features like floating point numbers
+and arrays.  LISP F4 is easy to implement.
+ 
+This document contains two parts, a users guide and an implementation
+guide.  The users guide presupposes basic knowledge of the LISP commands
+and functions (See Haraldsson LISP-details, referred to as Ha 75).
+ 
+       *********      USER'S GUIDE     ************
+ 
+PRIMARY DATA TYPES
+ 
+Small integers         Range -n,n where n is implementation
+                       dependent.
+                       If x is the maximum positive integer
+                       in a full word, n is x-size of CAR,CDR
+ 
+Floating point         Range depending on the size of a full word
+numbers                Characterized by BYTES, IRESOL, IPOWER, FUZZ.
+ 
+Lists                  Given as (A B (C D)) etc.
+ 
+Strings                Given as "THIS IS A STRING"
+ 
+Alfanum atom.          Max. no of characters = size of I/O-buff/2
+                       (default = 80).
+ 
+Arrays                 Containing pointers, integers and floating point
+                       numbers.
+ 
+INTERNAL REPRESENTATIONS
+ 
+A more complete description of the internal representations is needed
+for a complete knowledge and usage of LISP F4 from the user's point of
+view.
+ 
+a)          THE ADDRESS SPACE.
+ 
+The address space is shown by the following figure:
+ 
+1                                                                 MAX
+I---------------------I----------I---------------I-----------------I
+NIL   alphanum atoms     lists      pointers to      pointers to
+      and strings                   real numbers     small integers
+ 
+MAX = the largest positive integer in a halfword (or full word) in
+your computer.
+ 
+b)          ALPHANUMERICAL ATOMS AND STRINGS.
+ 
+ 
+               CAR             CDR
+        I----------------I----------------I
+        I                I             --------> property list
+        I-------I--------I----------------I
+                V
+         global value
+ 
+The global value of an atom is stored in CAR(atom).  (EVAL checks for
+a bound value BEFORE a global value - as in INTERLISP but in
+contradiction to LISP 1.5).  A global value may be set either by
+SET/SETQ at the top level, or directly by RPLACA.  If a global value
+has not been assigned, car(atom) points to the atom NOBIND.
+ 
+STRINGS are represented exactly as atoms except for
+- car(string) points to the atom STRING
+- Two different strings may have the same printname.
+- Strings always have themselves as their value.
+ 
+SUBSTRINGS are like strings, but instead of having a print name
+- car(substring) = SUBSTR
+- cdr(substring) = (sourcestring start .length)
+ 
+PRINTNAMES are accessed through the pointer representing the atom
+and hidden from the user in a special area.
+ 
+FUNCTION DEFINITIONS.
+
+In INTERLISP each atom-record also has a "function field" called a
+function cell (Ha 75 page 4).  In LISP F4 user defined functions
+are stored as LAMBDA or NLAMBDA expressions under the property
+FNCELL. SUBR's and FSUBR's are recognized by their pointer-value
+but in order to simulate the facility of making use of "free
+function indicators", GETD is defined to return (SUBR . FOO) if
+FOO is a FORTRAN coded SUBR, and (FSUBR . FOO) if it is an FSUBR.
+ 
+The forms (SUBR . FOO) and (FSUBR . FOO) are simulated function
+indicators and legal function arguments to apply.
+ 
+Ex.:
+        (DE KAR(X) ((SUBR . CAR) X>
+ 
+This definition of KAR causes KAR to behave exactly as CAR,
+independently of whether CAR has been redefined to something else.
+ 
+c)          FLOATING POINT NUMBERS AND ARRAYS
+ 
+FLOATING POINT NUMBERS are stored in consecutive floating point words in
+upper PNAME.
+ 
+Atoms obeying the following syntax are treated as numbers.  If
+floating point numbers:
+ 
+     number::= sm ! smEsn
+     s     ::= + ! - ! empty
+     n     ::= d ! dn
+     d     ::= 0 ! 1 ! 2 ! 3 ! 4 ! 5 ! 6 ! 7 ! 8 ! 9
+     m     ::= n ! n. ! n.n ! .n
+ 
+The "E" has the same meaning as in Fortran.
+ 
+Floating point numbers are printed as compactly as possible,
+either with or without the "E".
+ 
+ARRAYS contain pointers, integers or floating point numbers.
+CAR(pointer value) = LISPF4-ARRAY
+CDR(pointer value) = NIL
+By this means it is possible to call a Fortran subroutine with an
+actual parameter consisting of an address to an array part if the
+corresponding formal parameter is a properly typed array.
+ 
+Arrays cannot be read-in.  They are printed as
+ 
+     #xxx         # = left square bracket
+ 
+where xxx is the array pointer value.
+ 
+d)          THE SYMBOL TABLE CAN BE LOOKED UPON
+ 
+The function
+        (OBLIST x)
+creates a new list of atoms, with the last atom created as the first
+member of the list, and the atomic argument x as the last one.  As
+T is the last one defined by a "clean" system, (OBLIST T) gives you
+all but SUBR's and FSUBR's.
+ 
+e)          VARIABLE BINDINGS IN PARAMETER STACK
+ 
+Variable bindings are stored in a parameter stack (as in Interlisp)
+and is implicitly given to EVAL, APPLY and EVLIS.
+ 
+ Functions that use the stack.
+
+If you want to evaluate something and skip part of the stack
+you use the function EVSTK as follows.
+
+           (EVSTK form stkpos)
+
+This function works like eval but begins searching the stack at
+stkpos.
+
+If you are used to the function EVALA (lisp 1.5) this is what you
+should use (EVALA works but will put the alist on the stack and
+that takes time).
+
+To get a stkpos you use the function BINDENV
+
+           (BINDENV var)
+
+           returns stackaddress to the block before the block
+           where var is bound.
+           The address is returned as a smallnum 
+           pointing to the topmarker of the block.
+           If you try to supply anything that doesn't point
+           to a topmarker to EVSTK or APPLYSTK you will
+           get an error. This means that you can only
+           get lisp to start searching at a block boundary.
+
+_(DE TEST (BAR)(PROG () (PRINT BAR)(PRINT (EVSTK 'BAR (BINDENV BAR>
+TEST
+ 
+_(SETQ BAR 88)
+88
+ 
+_(TEST 77)
+77
+88
+NIL
+ 
+            The function TEST is defined to print it's argument
+            and print the value of it's argument outside it's
+            own block.
+
+The function applystk will do the same as applya in the same way.
+       
+             (APPLYSTK func list stkpos)
+
+Two safe definitions of RPTQ and SETQQ are:
+
+(RPTQ
+  (NLAMBDA (N X)
+        (APPLYSTK 'RPT (LIST (EVSTK N (BINDENV N)) X) (BINDENV N))))
+
+(SETQQ
+  <NLAMBDA L (APPLYSTK 'SET L (BINDENV L>)
+
+
+To look at the stack there is the function BTV*
+
+ 
+_(PP BAR)
+(BAR
+  (LAMBDA (U) (FOO (ADD1 U))))
+  
+(BAR)
+ 
+_(PP FOO)
+(FOO
+  (LAMBDA (X) (FUM (LIST X 77))))
+  
+(FOO)
+ 
+_(PP FUM)
+(FUM
+  (LAMBDA (L) (BTV*) (PRINT (REVERSE L))))
+  
+(FUM)
+ 
+_(BAR 567)
+Environment    Tops  
+     11         13
+#13  <0  11>
+#12  *FORM (BTV*)
+#11  <-8  8>
+#10  L (568 77)
+#9   *FORM (FUM (LIST X 77))
+#8   <-5  5>
+#7   X 568
+#6   *FORM (FOO (ADD1 U))
+#5   <0  2>
+#4   U 567
+#3   *FORM (BAR 567)
+#2   <0  0>
+#1   *FORM (LISPX)
+***  Bottom  ***    
+ 
+(77 568)
+(77 568)
+
+
+The function ALIST will build a list of dotted pairs with the variable
+and it's value from the stack.  ALIST with no argument will not
+include the *FORM variables but (ALIST T) will.
+
+
+_(DE A(X Y)(B 6 Y))
+A
+ 
+_(PP A)
+(A
+  (LAMBDA (X Y) (B 6 Y)))
+  
+(A)
+ 
+_(DE B(Z W)(SETQ R1 (ALIST))(SETQ R2(ALIST T>
+B
+ 
+_(PP B)
+(B
+  (LAMBDA (Z W) (SETQ R1 (ALIST)) (SETQ R2 (ALIST T))))
+  
+(B)
+ 
+_(A 567 88)
+((W . 88)
+  (Z . 6)
+  (*FORM B 6 Y)
+  (Y . 88)
+  (X . 567)
+  (*FORM A 567 88))
+ 
+_R1
+((W . 88)
+  (Z . 6)
+  (Y . 88)
+  (X . 567))
+ 
+_R2
+((W . 88)
+  (Z . 6)
+  (*FORM B 6 Y)
+  (Y . 88)
+  (X . 567)
+  (*FORM A 567 88))
+ 
+Two small functions are defined. The last of them will set R1 to
+(ALIST) and R2 to (ALIST T)
+
+f)          LISTS are represented as two pointer records with
+            CAR and CDR fields.
+ 
+g)          NUMBERS ARE IMPLEMENTED AS HIGH VALUED POINTERS.
+ 
+The value of a small integer is the value of the pointer subtracted
+by a proper offset.  The value of a real number is stored in a full
+word hidden from the user (but found through its pointer value).
+ 
+ATOMS OF PREDESIGNED MEANING
+ 
+Here is a list of those atoms which may be of interest for the LISP F4
+user.
+ 
+NIL,T           These atoms can not be destroyed by any functions
+                such as RPLACA etc.
+NOBIND          is stored in car of undefined atoms.
+LISPF4-STRING   is stored in car of strings.
+LISPF4-SUBSTR   is stored in car of substrings.
+LISPF4-ARRAY    is stored in car of arrays.
+ADVISEDFNS      List of advised functions.
+BROKENFNS       List of broken functions.
+CURFNS          List of those functions which have been defined
+                before the first time (CURFILE file) was performed.
+CURFILE         Name of the current file (used by the MAKEFILE
+                package).
+FILELST         List of files loaded so far.  Updated by the function
+                CURFILE.
+*PRINTLEVEL     The printlevel used by TRACE.
+ 
+I/O HANDLING
+ 
+Though LISP F4 was designed to be as true a subset of INTERLISP as
+possible, there does exist some minor differences.  Most of then have
+to do with I/O.
+ 
+a)          INPUT CHARACTERS OF SPECIAL MEANING.
+ 
+.           for dotted pairs.  Must be separated by blanks!
+            A '.' which can not be interpreted as 'a dotted pair'
+            is read as an atom.
+%           escape character
+'           QUOTE character
+" "         string character
+<>          super brackets
+ 
+All those characters works the same as in INTERLISP.
+ 
+~           'rescue character'.  When this character is seen by
+            the read routine, LISP F4 will enter BREAK.  (Useful
+            for infinite read loops for example).
+ 
+b)          CHANGING THE MEANING OF SPECIAL CHARACTERS.
+ 
+The "meaning" of all characters are stored in a table which is
+accessible by the function
+ 
+            (CHTAB x)     Read the type of x
+            (CHTAB x n)   Change the type of x.
+                          Returns old type.
+ 
+CHTAB uses the first character of the atom x.  The following character
+table is standard.
+ 
+        Type          Means
+        1             space
+        2             (
+        3             )
+        4             <
+        5             >
+        6             "
+        7             '
+        8             user break
+        9             .
+        10            alphanumerical
+        11            +
+        12            -
+        13-22         0-9
+        23            %
+        24            rescue character
+        25            E  exponent
+        26            # = square bracket
+ 
+Ex.:  If you want to have $ as a super bracket, and > as an ordinary
+letter do:
+ 
+        (SETQ TYPE (CHTAB '%> (CHTAB 'A>
+        (CHTAB '$ TYPE)
+and if you want to have * as a break character do
+        (CHTAB '* 8)
+ 
+after which A*B will be read as the three atoms A * B separately.
+ 
+c)          CHANGING LOGICAL UNITS ETC.
+ 
+All I/O functions refer to a table with the following meaning:
+ 
+        No            Means
+        1             FORTRAN logical input no
+        2             current read position
+        3             left margin - input
+        4             right margin - input
+        5             FORTRAN logical output no
+        6             current print position
+        7             left margin - output
+        8             right margin - output
+        9             the print length
+        10            the print depth
+ 
+The table us accessible by the function
+ 
+        (IOTAB i)     read position i in the table
+        (IOTAB i val) put val in position i.  Returns the old value.
+ 
+If val is T and i is 1 or 5, the default value (= standard Input/Output)
+is put in position i.
+ 
+A number of basic functions coded in LISP such as READPOS, INUNIT etc.
+are defined by using IOTAB, so in practice you rarely use IOTAB
+yourself.
+ 
+d)          CHANGING STANDARD BEHAVIOR OF LISP F4.
+ 
+The function
+        (SYSFLAG i)      Read flag i.
+        (SYSFLAG i x)    Change flag i to x (=T or NIL).
+                         Returns old value.
+is used to read/write flags with the following meaning:
+ 
+        Flag no T (which is default) means:
+        1           GBC message
+        2           output is pretty printed
+        3           (QUOTE s) printed as 's
+        4           convert atoms to capital letters (machine dep.)
+        5           Add % and " when so needed for a
+                    correct read back.
+        6           unused
+        7           Print sublists on separate lines, unless
+                    it is the first (or sometimes second) sub-
+                    expression.
+                    NIL means: during pretty print, do not begin
+                    a new line if the current expression will
+                    fit on line.
+ 
+e)          BASIC I/O FUNCTIONS.
+ 
+The following functions work as in INTERLISP except that they do not
+have a file argument.
+ 
+(READ)        (RATOM)        (READC)
+(PRINT x)     (PRIN1 x)      (PRIN2 x)     (TERPRI)
+(EJECT)       (SPACES n)
+ 
+ 
+In addition the following functions are defined using IOTAB.  If
+n is NIL they return the current value, otherwise a new value n is set
+and the old value is returned.
+ 
+(INUNIT n)       logical input no
+(OUTUNIT n)      logical output no
+(PRINTLEVEL n)   the max depth of printing.  (Lists below
+                 this level will be printed as ...)
+(PRINTLENGTH n)  the max length of printing.  (Elements
+                 beyond this length will be indicated as ---)
+ 
+As a matter of fact, PRINT, PRIN1 and PRIN2 are also defined in
+LISP using the one and only printing function PRIN0 which is defined
+as:
+ 
+      (PRIN0 x a b)
+ 
+      x      value to be printed (No TERPRI before or after!)
+      a      =NIL Do not print % or "
+             =T   Print % or " when so necessary to read
+                  atoms back
+             =T   pretty print with flag no 7 = NIL
+             =n   (a number)      - " -       = T
+ 
+During pretty-print, lists headed by an atom carrying the function
+definition (FSUBR . QUOTE) will be treated as comments:  They will
+be printed starting from 20 pos. to the left of the right margin.
+Ex.:  By doing (PUTD '* (GETD 'QUOTE)) * behaves as QUOTE and
+expressions like (* comment comment ...) will be printed as comments.
+In addition two functions are defined:
+ 
+      (PRINTL s1 s2 ..)
+ 
+performs PRIN1 on s1 s2 etc.
+ 
+      (PRINTL-SP s1 s2 ..)
+ 
+works as PRINTL but separates s1 s2 etc. by spaces.
+ 
+The function
+
+      (PROMPTTEXT string)
+
+allows you to specify a prompt text to be printed when reading from the
+terminal.
+
+A new function REWIND is defined:
+ 
+      (REWIND n)     Rewinds the logical unit n.
+                     Rewind should be logically the same as closing the file.
+ 
+
+f)          SAVE/RESTORE OF THE CORE IMAGE.
+ 
+The functions
+      (ROLLOUT lu)
+      (ROLLIN lu)
+ 
+saves/restores a compact core image of the status of LISP F4.  This
+can be read back at a later stage.  (Another way of saving is to
+use MAKEFILE.)
+ 
+It is possible to perform ROLLIN if the size of LISP F4 has been
+changed since the last ROLLOUT uless the new version is too small to
+hold the saved core image.  ROLLIN returns NIL (= failure to rollin)
+ 
+g)          THE MAKEFILE PACKAGE.
+ 
+This package is coded in LISP and follows the conventions for
+INTERLISP makefile.  The only commands in FILEVARS which are
+implemented are:
+ 
+       * (P ...) (PROP ...) (E ...) (IFPROP ...)
+ 
+The MAKEFILE package is designed to work in a similar way both if your
+Fortran dialect allows for symbolic file names and for only logical unit
+numbers.
+
+If you use symbolic file names, MAKEFILE and LOAD will behave as in Interlisp.
+
+If you need to use logical unit numbers, MAKEFILE and LOAD will prompt you
+for the logical unit number of the file corresponding to the symbolic name
+given to MAKEFILE/LOAD. You may also provide this association with the function
+ 
+       (OPEN file io no)
+       file   your symbolic name
+       io     I or INPUT for input files
+              O or OUTPUT for output files
+              other for input/output files
+       no     FORTRAN logical unit
+ 
+and if you have no further use of the file you may remove its logical
+unit number by
+ 
+       (CLOSE file)
+
+
+For systems allowing references to physical file names MAKEFILE, LOAD,
+ROLLIN, and ROLLOUT use the SUBR
+
+      (OPEN0 file input mode)
+
+which opens a sequential file named 'file'. If the flag 'input' is T the
+file is opened for input, otherwise for output. 'mode' is T if the file
+is a ROLLIN/ROLLOUT file, and NIL otherwise. OPEN0 opens the
+file and returns a logical unit number which can be used by INUNIT, and
+OUTUNIT, ROLLIN, or ROLLOUT.
+
+The function
+
+       (CURFILE file)
+ 
+declares that new function definitions shall belong to this file and
+will be added to the list fileFNS.  The global variable CURFILE
+contains the name of the current file.
+ 
+Ex.:  Define some functions and save them as your file MYFILE on the
+logical unit 25.
+ 
+        (OPEN 'MYFILE 'O 25)       (this line not needed when your system
+                                    uses symbolic file names, or if you let
+                                    MAKEFILE prompt you for logical unit
+                                    number of MYFILE)
+        (CURFILE MYFILE)
+        (DE ....>
+        (DE ....>
+        etc.
+        (MAKEFILE 'MYFILE T)
+ 
+A pretty printed version of all functions is now written on unit 25
+(argument no 2 is used as PRIN0's argument no 3 when it performs the
+printout).
+ 
+ERROR HANDLING AND BREAK.
+ 
+Mostly, all errors detected by LISP F4 call the function SYSERROR
+which is a SUBR and which calls RESET after printing a message.
+SYSERROR is then redefined in one of the standard LISP packages as
+a LAMBDA function which calls BREAK1 after the message.
+
+BREAK1 is the ordinary "break-function" and may therefore also have been
+called by a user setup break, and inside BREAK1 the following
+commands exist:
+ 
+        !        return to previous break if any. Otherwise reset.
+        GO       print "broken form" and continue.
+        OK       continue
+        RETURN x return the value of x.
+        EVAL     eval broken form and break afterwards.
+                 The value of the form is stored in the atom !VALUE
+        !EVAL    as EVAL etc, but the function
+        !GO         is first unbroken
+        !OK         then rebroken
+        UB       unbreaks the function.
+        BR       breaks the function.
+        BT       backtrace of function calls 
+        BTV      backtrace of function calls and variable bindings
+        (BTV*)   (a function call!). Total backtrace of everything on
+                 the parameter stack.
+        ?=       prints the arguments of the broken function
+ 
+        any other input is evaluated and value is printed.
+ 
+In addition to BREAK1, the functions BREAK0 BREAK UNBREAK REBREAK and
+TRACE are defined and work as in INTERLISP.
+ 
+There also exists a function BREAK11, which is a LAMBDA version of
+BREAK1 (which in turn is a NLAMBDA) and a function UNTRACE.
+ 
+Each error is associated with a number.  The function
+ 
+        (ERRORN)
+ 
+returns the number for the last error occurred, and
+ 
+        (ERRORMESS n)
+ 
+prints out a corresponding message.
+ 
+Note that you may modify SYSERROR in order to introduce your own handling
+of certain types of errors. For example, it is trivial to introduce run 
+time expanded macros by using SYSERROR. You then only have to modify SYSERROR
+so that the macro is expanded and evaluated if you get 'undefined function'
+(ERRORN=2) and if the undefined function has a macro definition.
+
+On most computers it is possible to associate an interrupt with some
+special character so that an interrupt occurs whenever the user types that 
+character. In the implementation guide it is described how to implement
+keyboard interrupts within Lispf4. If your implementation has keyboard
+interrupts you will enter a BREAK whenever you type the interrupt character.
+The interrupt feature is very useful for breaking indefinite loops.
+It may also be used for interrupting printing of large S-expressions.
+
+The interrupt characters  are normally
+    DEC20:        CTRL-H
+    VAX11:        CTRL-C
+    IBM/370:      BREAK
+Check with your Lispf4 implementor for the interrupt character on your
+Lispf4 implementation!
+
+EDIT
+ 
+Several edit functions are implemented:
+ 
+        (EDITF fn edcom)      edit a function.  Value = NIL.
+        (EDITS s edcom)       edit any s-expr.  Value = s
+	(EDITP s edcom)       edit the property list associated with s
+                              edcom = list of edit commands
+                              (or NIL).  If edcom is non-NIL the commands
+	                      will be executed and the editor will exit.
+
+In what follows cexpr is the current expression.
+ 
+The following commands are implemented.
+
+        OK               Leaves the editor
+ 
+Display:
+
+        P                Print to level 2
+        PP               PrettyPrint to level 2
+        ?                Print to level 100
+        ??               PrettyPrint to level 100
+
+Positioning the cexpr:
+ 
+        !                sets cexpr to top level expression
+        n                Set cexpr to the n'th element of cexpr.
+        -n               Set cexpr to the n'th element from the end of cexpr.
+	0                ascend one level.
+        NX               next expression
+	                 (descend to the next element one level above)
+        UP               Ascend one level but only display elements to the
+	                 right of the original cexpr.
+        F expr           searches the first occurrence of expr
+                         in the cexpr regardless of level
+
+        (MARK atm)       Set atom atm to the current edit position.
+	(\ atm)	         Go to position marked by atom atm
+
+Expression editing:
+
+  Adds:
+        (-n e1 ...)      inserts e1 ... before the n'th element.
+        (N e1 ...)       adds e1 ... after the last element within cexpr.
+	(A e1 ...)       Adds e1 ... AFTER cexpr.
+	(B e1 ...)       Adds e1 ... BEFORE cexpr.
+  Replacing:
+        (n e1 ...)       n >= 1 replaces the n'th expression by e1 ...
+        (: e1 ...)       Replaces the entire current expression by e1 ...
+        (R x y)          All occurrences of x are replaced by y in cexpr.
+        (MBD e1 ...)     Replace cexpr with e1 ... and allow * to represent
+	                 the original expression.
+	                 Ex.:  We have (PRINT X) and we want
+                               (COND ((NULL L) (PRINT X) NIL)
+                                     (T (PRINT X) (GO LOP)))
+                               we do
+                               (MBD (COND ((NULL L) * NIL)
+                                          (T * (GO LOP))))
+        (XTR e1 ...)     Ex.:  We have (COND ((NULL L) NIL)
+                                             (T (PRINT L))
+                               and we want (PRINT L)
+                               we do
+                               (XTR 3 2), (XTR (PRINT L)) or
+                               (XTR PRINT)
+
+  Deletions:
+        (n)              n >= 1 deletes the n'th expression of cexpr
+	(:)              Delete the current expression.
+
+  Global editing:
+
+        S x              Set x to the current expression.
+	(US x cmds)      Execute edit commands cmds with the ability to
+	                 utilize the expression in atom x
+	S and US can be used in different edit sessions.
+ 
+	Ex.:  Move the PROG expression of FOO to be the PROG expression of
+	another function FII.
+ 
+		(EDITF FOO)
+		F PROG S DEF OK
+		(EDITF FII)
+		(US DEF (3 DEF)) OK
+ 
+	The 3'rd element (the prog expression of FII) is replaced by the one
+	stored in DEF.
+
+Parenthesis manipulation:
+
+        (BI n m)         Both In.  A left parenthesis is inserted before
+                         the n'th element and a right parenthesis is
+                         inserted after the m'th element.
+	(BI n)           insert parenthesis around the n'th element
+        (BO n)           Both Out.  Removes both parenthesis from the
+                         n'th element.
+        (LI n)           Left In.  Inserts a left parenthesis before the
+                         n'th element and a corresponding right at the end
+        (LO n)           Left Out.  Removes the left parenthesis from the
+	                 n'th element.  All elements after the n'th element
+	                 are deleted.
+        (RI n m)         Right In.  Move the parenthesis at the end of the
+	                 n'th element in to after the m'th element.
+        (RO n)           Right Out.  Move the right parenthesis of the n'th
+	                 element to the end of the current expression.  All
+	                 elements following the n'th element are moved
+	                 inside the n'th element.
+
+Evaluation:
+
+	E expr           Evaluate expression expr.
+
+	(ESET x c1...)   Sets atom x to the edit commands c1...
+	x                Executes the edit commands associates with atom x.
+	(ESET x)         Disassociates all edit commands from atom x.
+ 
+MISCELLANEOUS
+ 
+A new function GO* is defined as a FSUBR.
+ 
+        (GO* LAB)
+ 
+searches through all current PROG's for a label LAB.  If it is found
+a jump is performed.  If it is not, NIL is returned and no other action
+takes place.
+ 
+GO* is a way of implementing ERRORSET, ERRORBANG, TRYTOEVALUATE, FAIL,
+etc.
+ 
+Ex.:
+ERRORSET is defined as:
+ (DE ERRORSET (ERRORFORM ERRFLG)
+             (PROG NIL
+                   (RETURN (LIST (EVAL ERRORFORM)))
+               ERRORSET>
+ 
+and SYSERROR is defined as:
+ 
+(DE SYSERROR (ERRORTYPE FN ARG FORM)
+             - print message if ERRORFLG = T -
+             (GO* ERRORSET)
+             (BREAK11 FORM T NIL>
+ 
+When SYSERROR is called it tries to jump to the label ERRORSET.  If it
+succeeds (error occurred under errorset) a "big jump" to ERRORSET is
+performed and the function ERRORSET returns NIL.  Otherwise BREAK11 is
+called.
+ 
+String functions:
+ 
+In addition to those explained in Ha 75 (page 108) three new string
+functions are defined:
+ 
+             (STRALLOC n c)
+ 
+The first character of the literal atom (or /sub/string) c is fetched,
+and a new string of length n is allocated, and filled with the character
+from c.
+ 
+Other functions not reported in Ha 75 are:
+ 
+             (ABS n)
+             (ADDLIST a l)    if memb(a,l) then l else cons(a,l)
+             (SORT l)         Destructive sorting function
+             (EVLIS l)        mapcar(l,'EVAL)
+             (GCGAG flg)      Print message when GBC (if flg = T)
+             (NTH l n)        Performs CDR n-1 times on l
+             (RPT n s)        evaluate s n times
+             (RPTQ n s)       as RPT but s is not evaluated at calling
+                              time.
+             (SIGN n)         0 or 1 or -1 depending on the sign of n
+             (CLOCK)          time in milliseconds.
+             (TIME)           time of the day
+             (DATE)           current date
+                              Note that the implementation of CLOCK, TIME,
+                              and DATE are machine dependent. They are
+                              implemented by the subroutines MSLFT, TIME,
+                              and MDATE.
+                              
+             (RECLAIM n)      n=0 Normal GBC
+                                1 Compacting GBC
+                                2 Big number GBC
+                                3 Big number/Atom GBC
+             (XCALL fn l)     A way of calling FORTRAN routines.
+                              Returns NIL in the virgin system.
+
+ 
+Array and floating point functions
+ 
+             (ARRAY s si sf) = a
+ 
+Creates an array with space for s elements.  Out of these s elements,
+si are to be integers and sf are to be floating.  The elements are
+initially set to NIL, 0 ,and 0.0, respectively.
+ 
+             (ARRAYSIZE a) = (s si sf)
+ 
+gives the sizes of the array a.  s, si and sf have the same meaning
+as above.
+ 
+             (ELT a j) = x
+             (ELTI a j) = i
+             (ELTR a j) = f
+ 
+picks the element j of the pointer, integer or floating part of a.
+Within each part, the elements are indexed from 1 and upwards.
+ 
+             (SET a j x) = x
+             (SETI a j i) = i
+             (SETR a j f) = f
+ 
+ 
+             (IQUOREM j k) = (quotient . remainder)
+ 
+This function performs an integer division of j by k.
+ 
+             (ARRAYP a) = a or NIL
+ 
+ARRAYP returns a if a is an array, otherwise NIL.
+ 
+             (FIXP i) = i or NIL
+ 
+FIXP returns i if i is a small integer, otherwise NIL.
+ 
+             (FLOATP f) =f or NIL
+ 
+FLOATP returns f if f is a floating point number, otherwise NIL.
+ 
+There is no special floating point arithmetic.  Instead, as long as
+all operands in a computation are integers, integer arithmetics is used.
+If any operand is floating, floating point arithmetics is performed.
+ 
+          **** IMPLEMENTATION GUIDE ****
+ 
+HOW TO IMPLEMENT LISP F4 ON YOUR COMPUTER.
+ 
+The LISP F4 system consists mainly of three parts:
+A.  The interpreter (master version) written in FORTRAN IV
+B.  'SYSATOMS' A file which will be read by LISP F4 at initiation.
+C.  Additional functions, written in LISP.
+ 
+For easy implementation do as follows:
+ 
+1. (this section is removed)
+ 
+2.  If you want to generate your own version or change one of the pre-
+designed versions, here are the variables at hand.
+ 
+NAME       REMARK                               CORR. ARRAY IN COMMON
+ 
+JBYTES     Bytes in a Lisp pointer
+IBYTES     Bytes in an integer
+BYTES      Bytes in a real number
+           (BYTES and IBYTES must be multiple of JBYTES)
+NATOM=n    No of atoms                          PNP(n+1)
+NFREET=f   f > 2*n.  No of atoms + cons cells   CAR(f), CDR(f)
+NSTACK=s   s > 500                              STACK(s)
+NHTAB=h    h == 1.5*n                           HTAB(h)
+                  == means "about"
+NPNAME=p   p == 2*n                             PNAME(p+2)
+HILL=hill  size of parameter stack              jack(hill),jill(hill)
+           hill == s
+
+IRESOL     The precision of a floating point number (in decimal digits).
+IPOWER     max(abs(p)), if floating point numbers are represented as
+           m*10**p, abs(m)<10
+FUZZ       will compensate for truncation errors in certain cases.
+           Should be set to 5*10**(-IRESOL)
+NBYTES=nb  nb = 2**x, where x = no of bits in a
+           byte (normally x = 6 for BCD, 7 for
+           ASCII and 8 for EBCDIC).
+           (Can be 8 for ascii too)
+MAXBIG     The largest positive integer that fits in a full word.
+MAXINT     The largest positive integer that fits
+           in the word size used for CAR and CDR.
+           (If you don't use half word integers,
+              MAXINT = MAXBIG).
+CHDIV=d    Used for calculating an index from a
+           character.  If CH is an INTEGER,
+           holding a character left justified the
+           value of i=ABS(CH/d)+1 must be in the
+           range (1,nb).  CHDIV is only used in
+           routines GETCHT and SETCHT.  Make sure
+           that they work!  If they do not, LISP F4
+           will fail while reading the SYS-atoms
+           and consequently never reach the LISP
+           top-loop.
+im         = MAXMESS*NBMESS/IBYTES              IMESS(im)
+           Don't forget to redimension IMESS!
+
+  The remaining system variables need only be changed in certain cases.
+
+MAXMESS    Number of messages
+NBMESS     Max number of characters in a message
+           Change it only when you add more
+           (and longer) messages to the system.
+LUNIN=li   Logical input.
+LUNUT=lu   Logical output.
+LUNSYS=ls  Logical unit for the SYS-atoms.
+MAXLUN     The largest logical unit number allowed
+IOBUFF     Size of ABUFF, BUFF,RDBUFF and PRBUFF
+           Normally = 150.
+NCHTYP=c   No of different "character types"
+           such as ( ) < > etc.
+NAREA      Length of common /B/ from ARG to
+           DREG(7).
+ 
+ 
+3.  Depending on how many bytes an INTEGER can hold you may have to
+change the FORMAT(...,A4) in RDA4 and WRA4 to FORMAT(...,A5) (or
+whatever)
+ 
+4.  If your compiler requires it, insert a PROGRAM statement at the
+beginning of the FORTRAN code.
+ 
+5.  Observe, that the COMMON block is separated from the rest of the
+FORTRAN code and replaced by:
+ 
+     INCLUDE 'F4COM.FOR'
+ 
+instead.  This makes it easy to change the common block.
+ 
+6.  Non-standard FORTRAN routines
+
+The routines GETCH and PUTCH are normally coded in assembler.  They
+are used for moving bytes (characters) to/from an array.  They can
+also be coded in Fortran if your Fortran dialect allows for byte
+manipulation. The subfile VAXFNT contains this Fortran code for VAX11
+Fortran.
+
+  Calling format:
+
+      CALL PUTCH(VEC,CH,I) Move to place I in VEC from the character CH.
+      CALL GETCH(VEC,CH,I) Move from place I in VEC to the character CH.
+ 
+The character in CH is left justified (with space padding).  Characters
+in VEC are numbered 1,2,.... (1 = the leftmost one). 
+Note that some computers (e.g. VAX11) store characters right justified.  
+
+The following three operating system dependent subprograms are
+initially dummy defined. If you want them to work correctly you have
+to define them according to your operating system.
+
+The subroutine MSLFT(I) returns the number of milliseconds left in
+the job. This value can be used to test how much time is left in the job
+when you are running in batch. Nowadays lisp is usually run interactively
+and the function is somewhat obsolete. On the DEC20 implementation
+mslft returns number of milliseconds cpu time the job has consumed and
+is used mainly for timing purposes.
+
+The subroutine MDATE(ISTR) sets ISTR to the current date as a 
+10 character string. If your computer returns date in an other format
+that is not 10 characters (maybe 8 or 12) you will also have to change
+in the HEART routine, the change is easy you have to tell the length in
+2 places that are marked in the code. Search in the code for mdate and
+change the two 10's to whatever length you use.
+
+The subroutine MTIME(ISTR) sets ISTR to the current time of day.
+If your time format is not 5 characters you must change the code as above.
+
+
+The subroutine BRSET without arguments is used for setting up terminal
+interrupts. BRSET should set up the interrupt so that the subroutine
+BRSERV without arguments is called whenever the user types a predefined
+break character (e.g. CTRL-H on DEC20, CTRL-C on VAX11, BREAK on IBM).
+
+It is very machine dependent how you trap interrupts. If the
+specification above is difficult to implement you can do it in some
+other way.  The way it works is that whenever the user types a break
+character the logical variable IBREAK in the common /A/ should be set
+to .TRUE.
+
+7.  It is now time to compile and run the system.  Assign your input
+(LISP-CODE) to logical unit li (normally teletype), and your output to
+lu (normally teletype).  The file SYS-atoms should be assigned to
+logical unit ls.  If all is OK so far, the system starts (after
+reading the SYS-atoms) with a message
+   LISP F4, LATEST UPDATE =
+   .....
+ 
+That is, when lispf4 starts it will read the system atoms from
+the unit ls (unit 23 in the distributed code). When the system atoms
+are read Lispf4 will write a message on unit lu (unit 5 in the code)
+and start reading expressions from unit li (5 in the code). If everything 
+works you should now be able to type in forms and get them evaluated.
+i.e you type (PLUS 6 7) after the prompter and lispf4 answers 13.
+
+
+8.  Read those LISP-package you want to use.
+To change the standard input in the "scratch" system, use
+   (IOTAB 1 unit)
+You may choose between:
+   BASIC1          (this one is necessary)
+   BASIC2
+   IO1
+   FUNC1           DE, DF etc
+   DEBUG1          BREAK,ADVISE, TRACE
+   DEBUG1          BREAK1, error
+   MAKEF           MAKEFILE
+   EDIT            STRUCTURE EDITOR
+ 
+You must of course have assigned the files above to a unit in some
+way before you try to read them.
+
+
+9.  For convenience you may now save your system by doing
+    (ROLLOUT unit)
+ 
+This file must also some way have been assigned to unit.
+
+10.  Next time you enter LISPF4 start with (ROLLIN unit).
+ 
+11.  Or, if you want to, replace the subroutine INIT2 by CALL ROLLIN(unit)
+and you will not need the SYS-atoms any longer.
+ 
+
+Once more
+
+compile all the code
+somehow assign
+
+    the file SYSATOMS      to unit LUNSYS (variable you set in intit2)
+    the terminal (input) to unit LUNINS            "--"
+    the terminal (output)to unit LUNUTS            "--"
+ 
+  optionally (but needed if you want to read lispcode or do a rollout)
+
+     the file BASIC1     to unit X
+              BASIC2     to unti Y
+                .................
+
+     some file (why not LISPROLL) to untin Z
+
+
+     now you can read BASIC1 by doing (IOTAB 1 X) etc.
+     or save the system by (rollout Z).
+
+If your system allows dynamic opening of files you can change the
+code in init2 so that lispf4 opens the file SYSATOMS at runtime, in
+this way you will not have to assign the lunsys unit to the file. A
+commented portion in the code shows how this can be done in DEC20
+fortran.
+
+In the same way you could of course open the terminal for input on LUNINS
+and output on LUNUTS if it is needed. This is not the case on DEC20.
+
+You can also write the function OPENF so that it works on your machine
+and then you don't have to assign any files before you run LISPF4. The
+OPENF function is documented later in this paper. The distributed code
+contains a dummy definition of this function. Code that shows how this 
+function is implemented for DEC20 is also supplied.
+
+Additional hints:
+ 
+- The range for small integers (MAXINT-BIGNUM)/2 should not be too
+small.  Make it > 1000.
+ 
+- The routine GARB may call LISPF4 "recursively" in case of error.
+This is done only in order to offer the user a nice error handling,
+but if your OS checks (and prohibits) "recursive" calls in FORTRAN you
+must either do it indirectly through an assembler routine or replace
+the call by an "error-return" by locking the stacks and placing an
+error code at the top of FSTACK.    
+ 
+INTERNAL REPRESENTATIONS.
+ 
+On the next page there is a picture of the most important areas and
+pointers used by the system.  Pointers are marked with straight arrows
+(--------> ) and the flow of character are marked with sparse arrows
+( - - - - -> ).
+ 
+Alpha numerical atoms:
+ 
+Let us follow what will happen when the atom FOO is read and printed.
+FOO is stored in RDBUFF by a previous FORTRAN-READ (with A1 format).
+RDPOS points to "the next character to be read".
+FOO is now inserted into ABUFF and escape characters are moved.  Before
+being moved the character is used as an index in CHTAB to determine its
+type.  A hash address is calculated and used as entry in HTAB.  Suppose
+that FOO has not been read before.  After finding an empty place in HTAB
+this place is updated to point to NATOMP and NATOMP is increased by one
+(new atoms are stored consecutively).  Suppose that NATOMP had the old
+value i.  The printname FOO is now stored in PNAME, JBP is
+updated to point to the next empty character position in PNAME.
+(Also printnames are stored consecutively starting from the bottom).
+The starting address for the printname is stored in PNP(i) and the
+ending address+1 is stored in PNP(i+1).  A pointer to the atom NOBIND
+is placed in CAR(i) and CDR(i) is set to NIL.  Finally the pointer
+i is returned to the caller.
+If later on FOO is to be printed, the print routine recognizes FOO as
+an atom (the pointer value i is below NATOM).  The printname is
+fetched using PNP(i) and PNP(i+1) and moved to the PRBUFF at position
+PRTPOS.  While moving CHTAB is consulted to check if escape characters
+(%) are needed.  When PRBUFF is filled up (PRTPOS > MARG) or if
+terpri() is called, the line is printed using FORTRAN-WRITE with
+format (1X,150A1).
+ 
+Important arrays and pointers in LISP F4.
+ 
+  Address space:                       Length = NATOM
+ 1                                           //                    MAXINT
+ I---------------I-------------------I---------------I--------!-------I
+NIL         NATOM  NFREEB      NFREET          BIGNUM      NUMADD
+    atoms and           lists           real numbers    small integers
+    strings
+ 
+            RDBUFF  (read buffer)
+           I- - - I------------------------------------I - - - - - I
+           I      I          FOO                       I           I
+           I- - - I------------------------------------I - - - - - I
+            1      LMARGR    !                     MARGR      IOBUFF
+   CHTAB                    RDPOS
+ I-----I NBYTES              !
+ I     I                     !
+ I     I   consulting        !
+ I     I<----------------->  !
+ I     I                     !
+ I-----I 1 !- - - - - - - - -!
+           !
+           !ABUFF   (print name buffer)
+           I--------------------------------------------I
+ i-------- IFOO                                         I
+ i         I--!-----------------------------------------I
+ i          ! ABUP1
+ i          !
+ i          !- - - - - - - - - - - - - - - - - - - - -!       JBP --!
+ i                                                    !             !
+ i <- hash address                                    !             !
+ i                                                    !             !
+ i  HTAB        CAR     CDR              PNP          !  PNAME      !
+ i I----I    I-------I-------I          I---I      I--!-------------!-I
+ i I    I 1  I       I       I NIL      I   I 1    I  !             ! I
+ i I    I    I       I       I          I   I      I  ! printnames  ! I
+ i I    I    I       I       I          I   I      I  !             ! I
+ i I----I    I       I       I          I   I      I  !->FOO- -!    ! I
+ ->I  -----i I-------I-------I          I---I      I     ! !   !    ! I
+   I----I  i->NOBIND I  NIL  I  <- - -> I  --------------! !   !    ! I
+   I    I    I-------I-------I  same    I---I      I       !   !    ! I
+   I    I    I       I       I  index   I  ----------------!   !    ! I
+   I    I    I       I       I          I---I      I           !    ! I
+   I    I    I       I       I          I   I      I           !    ! I
+   I    I    I       I       I          I   I      I   !- - - -!    ! I
+   I    I    I       I       I NATOMP   I   I      I   !            ! I
+   I    I    I---------------I          I   I      I   !            ! I
+   I    I    I Unused atom   I          I   I      I   !          <-! I
+   I    I    I space         I NATOM    I   I      I- -!- - - - - - - I
+   I    I    I---------------I          I   I      I   ! real numbers I
+   I    I    I       I       I NFREEB   I   I      I   !              I
+   I    I<-! I       I       I          I   I      I---!---!----------I
+   I    I  ! !       I       I          I   I          !   !    NPNAME
+   I----I  ! I       I       I          I   INATOM+1   !  NUMBP
+    // NHTAB I   free list   I NFREEP   I---I          !
+  hash-      I   start       I           //            !
+  table      I       I       I         byte address    !
+             I       I       I         in PNAME        !
+             I-------I-------I NFREET                  !
+                                                       !
+                          !- - - - - - - - - - - - - - !
+                          !                 CHTAB
+                          !                I-----I
+                          !                I     INBYTES
+                          !   consulting   I     I
+                          ! <------------->I     I
+                          !                I     I 1
+                          !                I-----I
+  PRBUFF  (print buffer)  !
+ I------I--------------------------------I- - - - - - -I
+ I      I                FOO             I             I
+ I------I--------------------------------I- - - - - - -I
+  1      LMARG            PRTPOS    MARG         IOBUFF
+ 
+Small integers:
+ 
+The address space NFREET + NATOM - MAXINT is reserved for small integers,
+and they are stored in the list structures as pointers.  The numerical
+value of a small integer is pointer-NUMADD.
+ 
+Floating point numbers:
+ 
+Real numbers are represented as pointers in the address space NFREET + 1
+- BIGNUM.  The length of this range is NATOM.  The integers themselves
+are stored consecutively as full word integers in PNAME starting form
+the top and using NUMBP as "free real space pointer".  When no more
+ 
+Strings:
+ 
+do not have an entry in HTAB but a pointer to the atom STRING is
+stored in CAR(i).  ("" are removed from the printname by the read
+routine and added if asked for by the print routine).
+ 
+Substrings:
+ 
+representing atoms and strings (1,NATOM).
+CAR(substring) = SUBSTR
+CDR(substring) = (sourcestring start . length)
+Substrings do not have a  printname of it's own (and thus do not occupy
+space in HTAB or PNAME).
+ 
+Lists:
+ 
+The variable NFREEP points to the free list.  After a compacting
+garbage collection the free list is a consecutive list of cons cells
+starting from NFREEP and growing backwards down to NFREEB.
+ 
+ARRAYS are stored in a way similar to that of atoms and stings.
+All array data are stored in the Fortran array PNAME.  Arrays are
+referred to by pointers in the range (T+1,NATOM).  Every array
+consists of three parts, each one of which may have zero length.
+The details are as follows:
+ 
+             (z is zero or more slack bytes.)
+             (i,j,k,l are byte pointers into PNAME.)
+ 
+x        = the array pointer value
+CAR(x)   = LISPF4-ARRAY
+CDR(x)   = NIL
+PNP(x)   = i
+PNP(x+1) = l
+ 
+PNAME:
+ ....(z j k (pointers) z (integers) z (f. p. n.)) ....
+      !                !            !             !
+      i                j            k             l
+ 
+The three array parts all start on a word boundary.  By a word we
+mean the basic storage cell for a data type.  (E.g. half machine
+word, full machine word, double machine word, etc.).
+ 
+By this means it is possible to call a Fortran subroutine with an
+actual parameter consisting of an address to an array part if the
+corresponding formal parameter is a properly typed array.  The
+advantage of this method, instead of having pointer arrays, is that
+we do not have to "unbox" and "box" numbers before and after calls
+to e.g. numerical routines.  For further details see the description
+of subroutine ARRUTL.
+ 
+RECURSIVE PROGRAMMING IN FORTRAN.
+ 
+The definition of the LISP F4 interpreter is highly recursive
+and in this chapter we will explain how recursion has been programmed.
+ 
+The stack:
+ 
+There are two stacks for recursive calls of sub functions.  One stack
+(named ASTACK) is used for saving values which are to be saved during
+a recursive call.  The other stack (named FSTACK) is used to hold
+return jump indicators, here represented as integers which are used in
+a computed GOTO-statement.  Both ASTACK and FSTACK are physically
+stored in the same vector STACK using IP and JP as stack-top pointers.
+ 
+                 STACK
+  NSTACK ----> ---------
+               I  val  I
+               I  val  I          part ASTACK
+               I  val  I
+       JP ---> I  val  I
+               I       I
+               I       I
+               I       I
+       IP ---> I  ret  I
+               I  ret  I
+               I  ret  I          part FSTACK
+               I  ret  I
+        1      ---------
+ 
+Pushing and popping are done by the routines
+ 
+        APUSH APUSH2 APUSH3
+        APOP  APOP2  APOP3
+        FPUSH
+ 
+and sometimes (for efficiency) in line as in
+        998 I = STACK(IP)
+            IP = IP - 1
+ 
+Recursive calls and returns:
+ 
+All recursive functions are coded in the FORTRAN subroutine LISPF4.
+That means that they are not subroutines themselves but just pieces of
+FORTRAN code.
+
+A call is performed by saving all necessary values with APUSH (or APUSH2,
+APUSH3) and by saving a return jump indicator with FPUSH.
+After all this pushing follows an unconditional GOTO to the "function"
+and that follows (normally) a statement with the same statement number
+as indicated by IND, there the execution is to continue at return from
+the calling function.  Saved values are then fetched by a proper number
+of calls to APOP.
+
+A return form a recursive function is done by GOTO 998 where the
+indicator saved on FSTACK is popped and used in a computed GOTO-
+statement leaving the program control to the caller.
+ 
+N.b.
+In order to give the user a change in case of stack overflow, we have
+done the following:
+
+Whenever the difference JP-IP becomes less than a preset value MIDDL,
+MIDDL is divided by 2 and SYSERROR is called (which in turn normally
+calls the break package).  When MIDDL has become too small RESET is
+performed and MIDDL is reinitialized to its original value.
+ 
+THE EVAL-APPLY SYSTEM.
+ 
+Eval-apply and all SUBR's and FSUBR's are handled by (or called from)
+the subroutine LISPF4 which is "the heart of the interpreter".
+Calling format is
+ 
+       CALL LISPF4(IND)
+ 
+where IND = 1 means "this is the first call to LISPF4".
+          = 2 means "restart the interpreter"
+
+ 
+The top level loop is defined as
+ 
+      lispx();
+      error();
+      reset();
+ 
+where lispx() is a SUBR defined as
+ 
+      loop:  print(eval(read())); go loop;
+ 
+but may be redefined by the user.
+ 
+Transmission of arguments:
+ 
+The variables ARG, ARG2 and ARG3 are reserved to hold the first three
+arguments to SUBR's.
+
+In case of SUBRN (see below) and FSUBR arguments are pushed onto ASTACK
+and the number of arguments are held in the variable IARGS.  The value
+of a function is assigned to IRES before returning and IRES is
+EQUIVALENCE'd to ARG.  (Sometimes an argument just passes through).
+In addition the variable FORM holds the form currently under
+execution.
+ 
+
+               Variable bindings in  lispf4
+ 
+
+LAMBDA, NLAMBDA and PROG variables are pushed onto the parameter
+stack (the arrays JACK and JILL) in traditional manner.  This list
+should be thought of as a simulated variable stack (and is used
+implicitly by eval, apply, setq, etc.).
+ 
+
+Lispf4 uses a stack for bindings very much like interlisp.  Each slot
+on the stack holds variable name and value. In the fortran code the
+stack is made up of two arrays JACK and JILL. At any given moment the
+global variable ENV points to the position of the stack that is the
+environment. A global variable TOPS points to the last used slot on
+the stack.
+
+When eval evaluates a variable it will first scan the stack starting
+at ENV.  If no value is found it will then look in the value-cell
+(i.e. CAR) of the atom and if there is no value there then there is
+an error.  When we enter a function we must bind its lambda variables
+on the stack and when we leave the function we must restore the
+stack as it was before.
+
+To do this we bind variables in blocks on the stack. One block for
+each function. These blocks must contain information to make it
+possible to remove them when we leave a function. This information
+is kept in the tops marker slots. For debugging (and also used
+internally) purpose we keep the form (i.e. usually function call) in
+the bottom marker.  A picture of the stack after 2 function call is
+showed below.  In the first block the variable (atom) FUM is bound
+to -23 and the variable FOOBAR is bound to nil.
+
+            JACK         JILL
+
+                 top marker
+ENV -->    -------------------------
+           ! BAR       !   77      !
+           ! FOO       !   88      !
+           -------------------------
+                 bottom marker
+                 tops marker
+           -------------------------
+           ! FUM       !   -23     !
+           ! FOOBAR    !   NIL     !
+           -------------------------
+                 bottom marker
+
+
+
+     The bottom and top marker.
+
+The top marker must hold information that makes it possible for us
+to restore the stack after a function call. JILL of the tops marker
+points to the previous tops marker. This makes it possible to drop
+the block by doing TOPS =: JILL(TOPS). We also must restore the
+environment and JACK of the topmarker points to previous
+environment. Thus we restore the environment by doing ENV =: JACK(ENV).
+
+But couldn't TOPS and ENV be the same?  No. Some functions don't
+bind variables on the stack (SUBR and FSUBR). We also want to be
+able to evaluate some forms in an environment that we manipulate
+ourself.  A funarg expression would put it's bindings on the stack
+but would let it's topmarker JACK (the environment pointer) point
+to 0.
+
+When we look for bindings on the stack we start in the block pointed
+to by ENV. After we have searched that block we follow this block's
+environment pointer (that's JACK) to the next block. When we find an
+environment pointer that points to 0 we are ready.
+
+When we leave a function we always drop the block on tops of the
+stack.  If the function was one that binds variables on the stack we
+also restore the environment.
+
+The bottom marker holds in JACK a pointer to *FORM
+and in JILL a pointer to FORM
+
+
+Lets see what the interpreter does when we evaluate a user defined
+function.
+           The form is (FOO FIE FUM (SETQ BAR 77))
+           FOO is defined  (DE FOO (X Y)(CONS X Y))
+
+
+          LAMBDA and NLAMBDA case
+          =====================
+           1. Put bottom marker 
+                 PREV := TOPS-1    ! we must remember the previous block
+                 JACK(TOPS) := *FORM
+                 JILL(TOPS) := FOO FIE FUM (SETQ BAR 77)
+                 TOPS := TOPS+1
+           2. Find the lambdalist (X Y)
+           3. Find arglist        (FIE FUM (SETQ BAR 77))
+           4. Take first element in the lambda list
+              put it in JACK(TOPS)
+              take first element of arglist
+              put it in JILL(TOPS)
+              arglist := rest(arglist)
+              lambdalist := rest(lambdalist)
+              TOPS := TOPS+1
+              repeat step 4 until arglist is empty.
+              If the lambdalist becomes empty before
+              the arglist someone has called a function
+              with more arguments than the function can use.
+              This is not what I call good programming but it's
+              allowed in interlisp and therefore allowed in LISPF4.
+              The extra arguments all get the name -*-.
+              The extra arguments are evaluated so if the evaluation
+              has side effects you could use this (miss)feature.
+
+           5. Put the top marker 
+                JILL(TOPS) := PREV
+
+               Now we must evaluate all the arguments.
+               At this time the bindings in this block
+               are not in the environment so we can
+               use JACK(TOPS) to something else.
+               We temporary let JACK(TOPS) := JILL(TOPS)
+               And we let JILL(TOPS) point to the argument
+               under evaluation.
+
+                The tops block now looks like this
+
+                                                            !- TOPS (global
+              !--  LINK,,LINK -------------------------!  <--     variable)
+    link      !    -*- (SETQ BAR 77)                   ! link to
+    to        !     Y  FUM                             ! argument
+    prev.     !     X  FIE                             ! under
+    block     !   *FORM (FOO FIE FUM (SETQ BAR 77))  <-! evaluation
+              !
+              !->  LINK,,LINK
+
+
+ Now you call eval with each argument. When the argument is
+evaluated its put in JILL(JILL(TOPS)) and JILL(TOPS) is increased by 1.
+When all arguments are evaluated we let JILL(TOPS) := JACK(TOPS)
+JACK(TOPS) := ENV, ENV := TOPS.
+
+Then we call eval with the body of the function.
+
+
+
+Representation of SUBR's and FSUBR's etc.
+ 
+The type of a function (if not LAMBDA or NLAMBDA) is indicated by the
+pointer value of the atom itself as seen in the following picture:
+ 
+ NIL
+I----------I----------I----------I----------I----------I----------I--...
+ 1       SUBR0      SUBR1      SUBR2      SUBR3      SUBRN      FSUBR
+ 
+I                          SUBR's                      I FSUBR's    I
+ 
+SUBR's with no arguments are numbered in the range 1-SUBR0 and so on
+for SUBR1, SUBR2 and SUBR3.  In the range SUBR3+1 - SUBR we have
+SUBR's with an indefinite number of arguments (as PLUS).  FSUBR's are
+numbered in SUBR+1 - FSUBR.
+
+These conventions make it easy for apply to determine the proper
+argument actions and then jump to the corresponding code using the
+pointer value of the atom in a computed GOTO.
+(SUBR . f) or (FSUBR . f) in the case of FORTRAN coded lisp functions.
+In practice getd(f) is used inline in eval-apply and does not
+construct the list (SUBR . f), but as (SUBR . f) is a legal function
+form, cases like ((SUBR . f) ...) are also taken care of.
+ 
+Error handling:
+ 
+Two classes of errors may occur in the system.
+ 
+1.  Hard errors - reset() is called.
+detected inside LISPF4) or perform CALL LISPF4(2) if detected by an
+other subroutine (garb is the only subroutine that does this).
+
+ 
+2.  Soft errors - syserror() is called.
+All these errors jump to a place where a call to
+ 
+          syserror(errno, fn, args, form)
+ 
+is built up and sent to apply for further action.
+RESET.  Normally SYSERROR is redefined in lisp to make use of the
+break package after the message.
+ 
+ 
+Though eval-apply works as given in appendix B not all help functions
+are called but placed inline.  Moreover it does not recursively call
+EVAL when the form to be evaluated is the last one in
+- PROGN
+- a LAMBDA body
+- a COND or SELECT clause.
+ 
+Especially as (LAMBDA (..) S) is quite a common expression this little
+trick saves a lot of good stack storage when recursion digs down.
+ 
+ 
+HOW TO ADD NEW SUBR's AND FSUBR's
+
+There are two ways of adding Lisp functions to the interpreter. The
+simplest way is to use XCALL(NO,ARGS); the other way is to add inline code
+to the heart of the interpreter, i.e. LISPF4.
+
+1. How to use XCALL
+
+The SUBR XCALL is initially dummy defined to return NIL. However, it can
+be used as a handle for calling Fortran subprograms form Lispf4. To do this
+you have to add code to the Fortran function XCALL(NO,ARGS), by using the
+NO as a 'code selector' and ARGS as a list of arguments to the new routine.
+In your Lisp program you then must call XCALL with the NO and ARGS belonging
+to the Fortran routine you wish to call. Note that XCALL normally has to
+convert Lisp data types into Fortran data types before calling the external
+routine, and vice versa when returning a value. 
+
+Note:
+If your routine calls the Lispf4 interpreter, you have to write inline code
+in Lispf4, making use of recursion conventions.
+
+2. How to add new SUBR's to the heart of Lispf4
+
+Do the following:
+
+a) Insert the function name in the file SYSATOMS. The location of
+the name is important. The functions are grouped after type and
+number of arguments.  (the order is SUBR's with 0 args, SUBR 1
+numerical arg, SUBR 1 non-numerical arg, SUBR 2 args, SUBR 3 args,
+SUBR n args, FSUBR's). Place the name in the selected list in SYSATOMS
+and remember the number of the location.
+
+b) Change the corresponding computed GOTO statement in LISPF4, by
+inserting a new statement number for the new function. Note that
+each group of build in functions have their own computed goto in
+LISPF4. The labels of these computed GOTOs correspond to the lists
+in the file SYSATOMS.  It is also recommended that you add a comment at
+the computed GOTO with the name of the new function.
+
+c) Put your piece of code somewhere. You may access the arguments to
+the function through the Fortran variables ARG, ARG2, ARG3. They can
+also be found on the stack JILL where the variable IARGS is equal to
+the actual number of arguments. The first arg is in
+jill(index), second in jill(index+1) etc.  Normal return is done by
+assigning IRES to the result value and then doing GOTO 998. If your
+function is a FSUBR you should return to 999 and not to 998 as these
+functions reset whatever stacks they use themselves.  You must
+of course do that too. Look at AND to see how it is done.
+
+Warning:  If you make use of CONS, MKNUM, or MATOM explicitly within
+your new function (also in XCALL), you must save all references to
+Lisp objects so that they can be found in case of garbage
+collection. Be sure to always store pointers to Lisp objects you
+want to keep in the Fortran variables TEMP1, TEMP2, TEMP3, ARG,
+ARG1, or ARG2, because the garbage collection marking is done from
+those variables.
+
+ADVICE FOR SAVING SPACE IF YOUR COMPUTER IS A MINI.
+ 
+- Do not use double buffering in I/O.
+ 
+  Some operating systems gives a choice between single and double
+  buffering as an option.  Use single!
+ 
+- Rewrite some routines in assembler.
+ 
+  Especially FORTRAN I/O is used in a very trivial manner, and is very
+  easy to recode in assembler.  In many cases this will save a lot of
+  program storage.
+ 
+- Overlaying.
+  The following routines never call each other directly or indirectly
+  LISPF4 vs.  INIT1, INIT2.  (INIT2 ought to be replaced by a call to
+  ROLLIN anyhow).
+  (GARB MARKL REHASH ROLLIN ROLLOUT MOVE) vs.
+  (LSPEX NCHARS EQUAL GET).
+  But as the last list consists of very small routines only it is
+  probably not worth overlaying.  However this list can be extended by
+  the routines (IPRINT PRIN1 PRINAT TERPRI) if you remove the call to
+  IPRINT and TERPRI from the routine GARB, rename GARB to GARB1 and
+  define a small routine GARB which calls GARB1 and then does the
+  IPRINT call.
+  See also the cross reference listing given in appendix A.
+ 
+- Removing code.
+ 
+  a) In GARB.  Remove the parts that perform atom - bignumber and
+  compacting gbc.  Also remove the recursive (inline) code for list
+  marking and use MARKL only.
+  Remove REHASH.
+  This implies that ROLLIN/ROLLOU must read/write the entire list
+  space and the hash table HTAB.
+ 
+  b) In PRIN1.  Remove the parts that are active during pretty-print
+  only.
+ 
+COMMENTS ABOUT THE FORTRAN ROUTINES USED.
+ 
+The FORTRAN routines are grouped in the following manner.  (See also
+appendix A, where a cross reference listing is given).
+ 
+1.  The "main" routine
+    MAIN 
+ 
+2.  Initiation routines.
+    INIT1 INTI2
+ 
+3.  The "heart" routine.
+    LISPF4
+ 
+4.  ROLLIN/OUT
+    ROLLIN ROLLOU MOVE
+ 
+5.  Garbage collection.
+    GARB MARKL REHASH
+ 
+6.  Input routines.
+    IREAD RATOM SHIFT RDNUMB
+ 
+7.  Output routines.
+    PRIN1 PRINAT PRIFLO PRIINT TERPRI IPRINT
+ 
+8.  Diverse help routines to LISPF4
+    MATOM MKNUM MKREAL GETNUM GTREAL GETCHT SETCHT NCHARS
+    LSPEX MESS XCALL
+ 
+9.  Small routines, push and pop etc.
+    APUSH APUSH2 APUSH3 APOP APOP2 APOP3 FPUSH CONS SUBST
+    EQUAL GET GETPN COMPPN ARRUTL
+ 
+10. I/O routines.
+    LOPEN RDA1 RDA4 WRA1 WRA4 EJECT REW DUMPUT DUMPIN
+    DMPIN2 DMPOU2 
+ 
+11. Assembler routines.
+    GETCH PUTCH 
+
+12. Machine dependent routines that must be coded in
+    assembler/fortran for each computer. These
+    routines are supplied in a dummy format that does nothing
+    but you have to write them to get date, time open symbolic
+    files e.t.c
+
+    MDATE,MTIME,MSLFT,OPENF
+ 
+1.      The "main" routines.
+ 
+1.1 SUBROUTINE MAIN
+
+The main object is:
+      CALL INIT1
+      CALL INIT2
+      CALL LISPF4(1)
+      CALL LSPEX
+ 
+ 
+ 
+2.      Initiation routines.
+ 
+2.1 SUBROUTINE INIT1
+Here all machine depended variables are set. 
+ 
+2.2 SUBROUTINE INIT2
+This routine reads the file SYSATOMS and sets up the character table,
+the symbol table and the list-space memory.  Also some variables
+corresponding to some LISP atoms are defined.  It is recommended that
+INIT2 is replaced by a call to ROLLIN as soon as a working system is
+generated.
+ 
+3.      The "heart" routine.
+ 
+3.1 SUBROUTINE LISPF4(IREE)
+ 
+The eval-apply system and all FORTRAN coded LISP functions.
+ 
+4.      ROLLIN/OUT.
+ 
+4.1 SUBROUTINE ROLLIN(LUN)
+ 
+Reads a file produced by ROLLOU from logical unit LUN.
+If rollin is not possible NIL is returned otherwise the value is LUN.
+If the size of any array has changed since the last ROLLOU a lot of
+pointers must be updated.  This is done by the routine MOVE.
+After reading, a new free list is constructed in the empty list space
+and the atoms are "rehashed" using the routine REHASH in order to
+establish a correct hash table.
+Finally read and write buffers are cleared, REWIND LUN is performed
+and LUN is returned as the value of ROLLIN.
+ 
+4.2 SUBROUTINE ROLLOU(LUN)
+ 
+The routine saves a binary pattern of the LISP memory to be used later
+on (read by ROLLIN).
+The following parts of the memory are written on logical unit LUN.
+CINF(1-15)      The 18 first words in COMMON /A/.
+                Used by ROLLIN to detect if rollin is
+                possible.
+IMESS(1-im)     All messages.
+AREA(1-NAREA)   COMMON /B/ up to (and including) DREG(7).
+PNAME(...)      Printnames.  Only used upper and lower parts.
+PNP(...)        Printname pointers.  Only used lower parts.
+CAR,CDR(...)    Only used lower(atoms) and upper(lists)
+                parts.  The free list is not written.
+BCOM(1-c)       COMMON /CHARS/.  (character variables).
+CHTAB(1-nb)     The character translation table.
+ 
+Before writing a compacting garbage collection is called in order to
+save a lot of space and time by not writing the free list.
+CINF(1-8) consists of those variables which must not be changed until
+next ROLLIN.
+CINF(9-15) are those local pointers which may be updated if the sizes
+of arrays have been changed.
+Help routines to do all writing are DMPOU2 and DUMPUT.
+ROLLOU rewinds LUN before returning.
+ 
+4.3 SUBROUTINE MOVE(DIFF,MIN,MAX)
+ 
+Used by ROLLIN to add DIFF to pointers in the range MIN < p <= MAX.
+Pointers p are taken from CAR,CDR and ARGS(1-10) where ARGS is
+equivalent to ARG, ARG1, ARG2 etc. in COMMON /B/.
+ 
+5.      Garbage collection.
+ 
+5.1 INTEGER FUNCTION GARB(GBCTYP).
+ 
+This is the routine responsible for garbage collection.  The kind of
+gbc is indicated by GBCTYP:
+ 
+        GBCTYP   action                           called from
+        ------   ------                           -----------
+        0        Normal gbc. List cells only.     CONS
+        1        List compacting.                 ROLLOU
+        2        Big numbers.                     MKNUM
+        3        Big numbers and atoms.           MATOM, MKNUM, MKREAL
+ 
+GARB may also have been called form LISPF4 (the LISP function
+reclaim(gbctyp) ).
+
+Here is a short description of the working behavior of the garbage
+collector:
+ 
+Step 1:
+Mark active cells by negating CDR.  If big numbers gbc mark in the
+vector PNP.  If atom gbc mark also in CDR of atoms (by temporarily
+setting NFREEB = T + 1).
+ 
+Step 2:
+Select proper action depending on GBCTYP.
+ 
+       0 goto step 7
+       1 goto step 3
+       2 goto step 5
+       3 goto step 5
+ 
+Step 3:
+List compacting (GBCTYP = 1).
+Move active CAR CDR to the top of free storage and unmark CDR.  Leave
+new address  in CDR of moved cell.  Goto step 6.
+ 
+Step 4:
+Atom gbc (GBCTYP = 3).
+Move active atoms to the lower part of atom space (lower CAR,CDR).
+Leave new address in (negative) HTAB and unmark CDR.  Goto step 6.
+ 
+Step 5:
+Big numbers (GBCTYP = 2,3).
+Move active numbers (marked in PNP) to the top of PNAME.  Leave new
+address in old place in PNAME.  Reset PNP.  If GBCTYP = 2 then goto 6,
+otherwise goto step 4.
+ 
+Step 6:
+Restore moved pointers (GBCTYP = 1,2,3).
+ 
+Step 7:
+Clear memory.
+GBCTYP = 0,1    Construct a free list and return.
+       = 2      Return.
+       = 3      Rehash all saved atoms and return.
+ 
+ 
+Marking active atoms and cells starts from:
+- The COMMON variables ARG ARG2 ARG3 ALIST FORM TEMP1 TEMP2
+      TEMP3 I1CONS I2CONS
+- Current ASTACK (temporarily saved values).
+- CAR and CDR of defined atoms.
+ 
+In the marking phase, a list of all encountered arrays is built up.  The
+list is headed by the variable ARRLST.  Then -CDR(ARRLST) points to the
+next array etc., until we get to NIL.  The mark phase is finished by
+four steps:
+ 
+1.  If ARRLST = NIL then exit.
+2.  S:= ARRLST;  ARRLST:=-CDR(S);  CDR(S):=-NIL.
+3.  "Start marking from all pointers stored in the array S"
+4.  Go to 1.
+ 
+ 
+2 SUBROUTINE MARKL.
+
+This is a non recursive marking routine used by GARB if local stack
+inline code in GARB as it looks upon each cons cell twice.  But in
+case of program space problems, you may use only MARKL and remove the
+marking code in GARB.
+The algorithm is described in Sc 67.
+Treats arrays as in GARB.
+ 
+5.3 SUBROUTINE REHASH.
+This routine is used for constructing a new entry in HTAB for each
+existing atom.  REHASH is called from ROLLIN and from GARB (when atom
+gbc is asked for).
+ 
+6.      Input routines.
+ 
+6.1 FUNCTION IREAD(N).
+ 
+(N is a dummy).
+IREAD reads an S-expression into internal form.  (See also appendix B
+where IREAD is defined in LISP).
+It uses RATOM to read separate tokens such as atoms, numbers
+parenthesises etc.
+The value is a pointer to the constructed S-expression.
+ 
+6.2 INTEGER FUNCTION RATOM(A,IOP).
+ 
+Called by IREAD to read the next token from the input buffer RDBUFF.
+(IOP = 1).
+RATOM is also called from LISPF4 (IOP = 0).
+RATOM classifies the token and returns a type (and a value in the
+parameter A) as follows:
+ 
+     token   returned value  returned in A
+     -----   --------------  -------------
+     atom          1            atom
+      (            2            NIL
+      )            3            NIL
+      '            4            NIL
+      .            5          the atom .
+ 
+RATOM keeps < and > in a separate bracket stack and (if called from
+IREAD) < or > are never seen but returned as ( or as a proper number
+of )'s.
+ 
+6.3 SUBROUTINE SHIFT(I).
+ 
+Reads the next character from the input buffer RDBUFF (and reads a new
+line into RDBUFF if necessary).   The character is returned in CHR and
+the type of the character in CHT.  The table CHTAB is accessed with
+the character value (range 1 - NBYTES) to determine the type.  (A list
+of different types is given in LISPF4 - User guide).
+ 
+If I = 1 at entry the previous CHR is stored in ABUFF (the buffer for
+a printname given to MATOM).
+ 
+If I = 3 at entry, the previous CHR belongs to a string under
+construction and is stored in PNAME.
+ 
+The escape character % is never returned by SHIFT but signals the next
+character to be treated as a letter, digit, + or - sign (depending on
+its type).
+Normally SHIFT is called from RATOM (the flag IFLG2 =NIL) but
+sometimes also from the code for unpack(x) in LISPF4 (IFLG2 = T).  If
+called from unpack, characters are read from PRBUFF instead and all
+characters are treated as if they were prefixed by a %.
+ 
+6.4 INTEGER FUNCTION RDNUMB(INTG) OR
+                           (FLO).
+
+(This function does not exist in the code now. The parsing is done
+inline in ratom.)
+ 
+This routine is a scanner for a integer/floating point number with
+the following syntax:
+ 
+   number ::= sm ! smEsn
+   s      ::= + ! - ! empty
+   n      ::= d ! dn
+   d      ::= 0 ! 1 ! 2 ! 3 ! 4 ! 5 ! 6 ! 7 ! 8 ! 9
+   m      ::= n ! n. ! n.n ! .n
+ 
+7.      Output routines.
+ 
+7.1 SUBROUTINE PRIN1(S).
+ 
+This is the routine which prints a S-expression.  The format of the
+output is directed by SYSFLAG(i) as follows:
+ 
+      SYSFLAG no      value      means
+      ----------      -----      -----
+         2            NIL        fast printing
+                      T          pretty printing
+         3            NIL        (QUOTE s) prints as (QUOTE s)
+                      T          (QUOTE s) prints as 's
+         5            NIL        Do not add % or "
+                      T          Add % or " when so needed
+                                 for correct read back.
+                                 (This flag is checked by
+                                  PRINAT).
+                                 Only used during pretty-print.
+         7            NIL        Do not begin a new line if
+                                 the current expression will
+                                 fit on line.
+                      T          Begin a new line whenever a
+                                 sublist is found unless it is
+                                 the first (or sometimes second)
+                                 sub-expression.
+ 
+A definition of PRIN1 in LISP is given in appendix B.
+ 
+7.2 SUBROUTINE PRINAT(X,NKW,JPOLD).
+ 
+Prints an atom X or ... (if X = -1) or --- (if X = -2).
+NKW is the number of '-s to be printed.
+JPOLD is a saved stack pointer which is used to reset the stack in
+case of error.
+The printname is first stored in PRBUFF, then checked if it fits.
+(That is why the size of the print buffer is twice maximum of a
+printname).
+If overflow has occurred TERPRI print the line up to the old print
+position and then the printname for the atom is moved to the proper
+position in PRBUFF.
+For each character sent to PRBUFF a test by the routine GETCHT is
+performed to check whether a % is needed or not.  This check is not
+done if SYSFLAG(5) = NIL.
+ 
+7.3 SUBROUTINE PRIFLO(F).
+ 
+Prints the floating point number F.
+ 
+7.4 SUBROUTINE PRIINT(I).
+ 
+Prints the integer I.
+ 
+7.5 SUBROUTINE TERPRI.
+ 
+Writes PRBUFF on logical unit LUNUT and resets PRTPOS (the print
+position) to LMARG (current left margin).  If called from NCHARS (the
+flag IFLG1 is not = NIL) output is not printed but the numbers of
+characters (= value of PRTPOS -1) is accumulated to IFLG1.
+ 
+7.6 SUBROUTINE IPRINT(I).
+ 
+         CALL PRIN1(I)
+         CALL TERPRI
+         RETURN
+         END
+ 
+8.      SOME AUXILIARY ROUTINES FOR LISPF4
+ 
+8.1 FUNCTION MATOM(L).
+ 
+At entry abs(L) character are stored in ABUFF.  If L > 0 MATOM
+creates an atom otherwise a sting is constructed.
+If an atom with the same printname already exists, that atom is
+returned as the value of MATOM; otherwise a new atom is created.  If
+no more space for atoms are left a compacting atom garbage collection
+is performed.
+ 
+8.2 FUNCTION MKNUM(N).
+ 
+N is a full word integer.
+value of N.
+ 
+8.3 SUBROUTINE MKREAL(R).
+ 
+Stores a floating point number in upper PNAME and returns a LISP pointer
+to it.
+ 
+8.4 INTEGER FUNCTION GETNUM(I).
+ 
+Returns the FORTRAN integer value of a LISP number as an integer.
+GETNUM converts real numbers to integers. The caller is responsible for
+I to be a LISP number.
+ 
+8.5 FUNCTION GTREAL(I,IRETUR).
+ 
+pointer I.  IRETUR will contain the closest integer number.
+ 
+If I points to a small integer, GTREAL will return 0.0 (but IRETUR
+will still return the integer value).
+ 
+8.6 INTEGER FUNCTION GETCHT(IC) AND SUBROUTINE SETCHT(IC,IT)
+ 
+These routines are used for fetching/storing the internal type of a
+character.  Calling format:
+ 
+        I =GETCHT(IC)
+        CALL SETCHT(IC,IT)
+ 
+A character should be placed left justified in IC before calling.  The
+integer value of that character is used as an index in the table
+CHTAB.  The variable CHDIV is used to calculate this index by an
+integer division.
+with a new one (IT in SETCHT).
+It is recommended to recode GETCHT and SETCHT in assembler.
+(Or do this is some faster way than dividing)
+ 
+8.7 INTEGER FUNCTION NCHARS(S,IFLG).
+ 
+This routine is used by the LISP functions concat, pack, unpack and
+nchars in order to create a printname representation in PRBUFF.  It is
+done by saving the current print status (buffer and pointer) and
+calling PRIN1 for each member in S (which is a list of S-expressions).
+IFLG = T indicates that % is to be printed by PRIN1 when needed.
+The flag IFLG1 is set to NUMADD (not NIL) to indicate to TERPRI that
+IFLG1 (in order to count characters).
+After calling NCHARS,
+ 
+- concat   creates a string.  TERPRI builds the printnames from
+           the print buffer.
+- nchars   returns the number of characters.
+- pack     creates an atom from the print buffer.
+- unpack   creates a list of atoms by reading the print
+           buffer character by character.
+ 
+Before returning they must reset the print status.
+ 
+8.8 SUBROUTINE LSPEX.
+ 
+Exits from LISP F4 after writing statistical messages.  The exit is
+done by the FORTRAN statement STOP. 
+ 
+8.9 SUBROUTINE MESS(I).
+ 
+If I = 0 then MESS was called from INIT2 and messages are read from
+LUNSYS.  Otherwise a message corresponding to the no I is printed.
+ 
+8.10 INTEGER FUNCTION XCALL(FN,L).
+ 
+A dummy function (returns NIL) where you may add your own pieces of
+FORTRAN codes such as calling other subroutines.  Use FN as a selector
+in a computed GOTO and L as the argument list.  FN is a FORTRAN
+integer at calling.
+ 
+9.      Small routines, push and pop etc.
+ 
+9.1 PUSHING AND POPPING
+ 
+The following subroutines handle ASTACK, the upper part of the array
+STACK.  JP points to the current top.
+ 
+   APUSH(I) APUSH2(I,J) APUSH3(I,J,K)
+    APOP(I)  APOP2(I,J)  APOP3(I,J,K)
+ 
+(Pushing and popping are done from left to right in the argument
+lists).
+The subroutine FPUSH(I) pushes a statement number indicator onto
+FSTACK, the lower part of STACK.  Here IP points to the current top.
+ 
+address is put onto FSTACK (which forces LISPF4 to jump to the reset
+label at next recursive return.).
+ 
+Remark:  In the eval-apply system pushing and popping are coded
+inline.  At the entrance of eval there is a check whether the stack
+space left is reasonable.
+ 
+9.2 INTEGER FUNCTION CONS(I1,I2)
+ 
+Does cons(I1,I2).
+In case of an empty free list garbage collection is activated (GARB).
+If the number of free cons cells is less than ISPLFT a weak error is
+triggered (SYSERROR - break) and ISPLFT is divided by 2.
+ISPLFT is reset to 400 whenever a RESET is performed.
+ 
+9.3 INTEGER FUNCTION SUBST(IX,IY,IS).
+ 
+Does subst(ix,iy,is).
+ 
+(this function is now replaced with SUBPR (substitute pairs) that
+is much more general) SUBST is then defined in one of the lisp-packages
+in terms of subpair.
+
+
+9.4 INTEGER FUNCTION EQUAL(II,JJ).
+ 
+Does equal(ii,jj).
+ 
+9.5 INTEGER FUNCTION GET(J,I).
+ 
+Does get(j,i).
+ 
+9.6 INTEGER FUNCTION GETPN(X,MAIN,JB,IPL).
+ 
+  MAIN   = Pointer to main string if substring.
+  JB     = Byte offset in printname.
+  IPL    = Byte length of printname.
+  GETPN  = -1  X is invalid.
+            0  if X literal atom.
+            1  if X string or substring.
+ 
+9.7 INTEGER FUNCTION COMPPN(X,Y).
+ 
+              returns:           if:
+               -2                x is invalid
+               -1                x < y
+                0                x = y
+                1                x > y
+                2                y is invalid
+ 
+9.8 SUBROUTINE ARRUTL(IPTR,IACTN,IPART,IFIRST,ILEN).
+ 
+This routine performs various array handling functions.
+IPTR is a pointer to the array, IPART tells which part of it (1,2,or
+3), and IACTN tells what action to be done:
+ 
+IACTN = 1  get array element IFIRST
+        2  set array element IFIRST
+        3  set IFIRST  and ILEN to array part bounds
+ 
+array part and ILEN is the number of elements.
+ 
+10.     I/O routines.
+ 
+10.1 REMOVED
+
+ 
+10.2 SUBROUTINE RDA1(LUN,CARD,I1,I2,IEOF).
+ 
+Reads from logical unit LUN to the array CARD(I1-I2) using A1 format.
+If end of file is found,IEOF is set to 2.
+Used by SHIFT and INIT2.
+ 
+10.3 SUBROUTINE RDA4(LUN,CARD I1,I2)
+ 
+As RDA1 but uses format A4.  Used by MESS.
+(or whatever format is a fullword  on your machine)
+
+10.4 SUBROUTINE WRA1(LUN,LINE,I1,I2).
+ 
+Writes LINE(I1-I2) on logical unit LUN using format (1X,150A1).
+Used by TERPRI.
+ 
+10.5 SUBROUTINE WRA4(LINE,I1,I2).
+ 
+As WRA1 but uses format (1X,100A4).  Used by MESS.
+ 
+10.6 SUBROUTINE EJECT(LUN).
+ 
+Skip to next page by writing format (1H1) on LUN.
+ 
+10.7 SUBROUTINE REW(LUN).
+ 
+Does REWIND LUN.
+ 
+10.8 SUBROUTINE DMPIN(LUN,AREA,START,STOP)
+ 
+Reads AREA(START-STOP)/LINE(I1-I2) in binary format from logical unit LUN.
+Used by ROLLIN.
+ 
+10.9 SUBROUTINE DMPOUT(LUN,AREA,START,STOP)
+ 
+Writes AREA(START-STOP)/LINE(I1-I2) in binary format on logical unit LUN.
+Used by ROLLOU.
+ 
+(the two routines dmbin2 and dmpou2 use integer*2 format, if
+you use integers as lisp pointers (i.e. in CAR and CDR arrays) these
+routines must be the same as DMPIN and DMPOUT)
+ 
+11.     Assembler routines.
+ 
+11.1 GETCH AND PUTCH.
+ 
+These routines are coded in assembler and used for moving bytes from/to
+an array.  Calling format:
+ 
+       CALL PUTCH(VEC,CH,I)
+       Store a character CH at location I in the array VEC.
+       CALL GETCH(VEC,CH,I)
+ 
+The character in CH is left justified with space padding.
+The array VEC behaves as a character array numbered 1,2,3... (1 = the
+leftmost one).
+ 
+11.2 MSLEFT
+ 
+The time scheduling routine which is coded in assembler.
+MSLEFT is only called from LISPF4, the LISP function clock().  Use
+your own time routine, or skip it if you do not care about the
+clock function. 
+ 
+ 
+APPENDIX A
+ 
+CROSS-REFERENCE LIST OF FORTRAN ROUTINES.
+(this listing may be wrong and may not contain all routines
+and may contain routines that are not included in this version.
+This listing was produced on a computer with a program that no
+longer exist, and no one has bothered to change the listing)
+
+Routine:    Calling:
+ 
+MAIN        INIT1   INIT2/ROLLIN    LISPF4  (LSPEX)
+INIT1       GETCH
+INIT2       IREAD   RDA1    SETCHT  MESS
+LISPF4      All routines but:
+            INIT1   INIT2   MAIN     (These are not called)
+            REHASH  DMPIN  DMPOUT   (These and the following
+            DAMPIN  DAMPUT  RDA1      are only called indirectly).
+            RDA4    WRA1    WRA4
+ROLLIN      MOVE    REHASH  REW     DMPIN  DMPOUT
+ROLLOU      GARB    REW     DMPIN  DMPOUT
+GARB        MARKL   MESS    IPRINT  PRIINT  REHASH
+            ARRUTL
+REHASH      GETCH
+IREAD       RATOM   CONS    FPUSH   APUSH2  APOP2
+RATOM       MATOM   MKNUM   MKREAL  CONS    SHIFT
+SHIFT       LSPEX   MESS    GETCHT  RDA1    MATOM
+RDNUMB      SHIFT   MKNUM   MKREAL
+PRIN1       PRINAT  TERPRI  APUSH2  APUSH3  APOP2
+            APOP3
+PRINAT      PRIFLO  PRIINT  TERPRI  GETNUM  GTREAL
+            GETCH   GETCHT  GETPN
+PRIFLO      PRIINT
+TERPRI      WRA1    PUTCH   MATOM
+IPRINT      PRIN1   TERPRI
+MATOM       GARB    PUTCH   GETCH
+MKNUM       GARB    MESS    MKREAL
+MKREAL      GARB
+GETNUM      GTREAL
+NCHARS      PRIN1   MKNUM   CONS    APUSH
+LSPEX       IPRINT  MKNUM   CONS    MESS    TERPRI
+MESS        RDA4    WRA4
+XCALL
+CONS        GARB
+SUBST       CONS    APUSH   APOP    FPUSH
+EQUAL       GTREAL  GETNUM  APUSH2  APOP2   COMPPN
+GETPN       GETNUM
+COMPPN      GETPN   GETCH
+ 
+APPENDIX B
+ 
+DEFINITION OF EVAL APPLY READ AND PRINT.
+
+(The definition of eval-apply is not absolutely correct
+as it is the definition of the old LISPF3 system that used an
+A-list to keep variable bindings. This system use a stack instead.)
+ 
+<DEFINEQ
+<LISPF4
+(LAMBDA (N)
+        (PROG (EVALSW ERRFN ALIST *BACKTRACE *BACKTRACEFLG)
+        (AND (EQ N 1) (PRINT "LISP F4 etc."))
+        (RESET)
+        (APPLY 'LISPX NIL)
+        (ERROR 25 'LISPX NIL NIL>
+<LISPX
+(LAMBDA NIL
+        (PROG NIL
+         LOOP (PRINT (EVAL (READ)))
+              (GO LOOP>
+<EVAL
+(LAMBDA (FORM)
+        (COND ((OR (NUMBERP FORM) (STRINGP FORM)) FORM)
+              ((ATOM FORM)
+               <COND ((FORM_ON_ALIST?) (USE_BOUND_VALUE))
+                     ((NEQ (CAR FORM) 'NOBIND) (CAR FORM))
+                     (T (SETQ EVALSW T)
+                        (SETQ ERRFN 'EVAL)
+                        (EAPPLY (CAR FORM) (CDR FORM>
+<APPLY
+(LAMBDA (FN ARGS)
+        (SETQ EVALSW NIL)
+        (SETQ ERRFN 'APPLY)
+        (SETQ FORM (CONS FN ARGS))
+        (AND FN (EAPPLY FN ARGS>
+<EAPPLY
+(LAMBDA (FN ARGS)
+        (COND ((LITATOM FN)
+               <COND ((GETD FN) (APPLYFN2 (GETD FN) ARGS))
+                     (T (ERROR 2 ERRFN FN FORM>)
+              (T (APPLYFN2 FN ARGS>
+<APPLYFN1
+(LAMBDA (FN ARGS)
+        (COND ((SUBRP FN) (AND EVALSW (SETQ ARGS (EVLIS ARGS)))
+                          (SAPPLY FN ARGS))
+              ((FSUBRP FN) (SAPPLY FN ARGS))
+              (T (ERROR 2 ERRFN FN FORM>
+<APPLYFN2
+(LAMBDA (FN ARGS)
+        (COND ((NLISTP FN) (ERROR 2 ERRFN FN FORM))
+              (T (SELECTQ (CAR FN)
+                   (LAMBDA (AND EVALSW (SETQ ARGS (EVLIS ARGS)))
+                           (LAPPLY FN ARGS))
+                   (NLAMBDA (LAPPLY FN ARGS))
+                   ((SUBR FSUBR) (APPLYFN1 (CDR FN) ARGS))
+                   (FUNARG (PUSH ALIST)
+                           (SETQ ALIST (CADDR FN))
+                           (SETQ RES (EAPPLY (CADR FN) ARGS))
+                           RES)
+                   (ERROR 2 ERRFN FN FORM>
+<LAPPLY
+(LAMBDA (FN ARGS)
+        (AND *BACKTRACEFLG
+             (SETQ *BACKTRACE (CONS FORM *BACKTRACE)))
+        (PUSH_ARGS_ON_ALIST)
+        (SETQ RES (EVLAST (CDDR FN)))
+        (AND *BACKTRACEFLG
+             (SETQ *BACKTRACE (CDR *BACKTRACE)))
+        RES>
+<SAPPLY
+(LAMBDA (FN ARGS)
+        (JUMP_TO_CODE_FOR_FN>
+<GETD
+(LAMBDA (FN)
+        (CONS ((GETPROP FN 'FNCELL))
+              ((SUBRP FN) (CONS 'SUBR FN))
+              ((FSUBRP FN) (CONS 'FSUBR FN>
+<ERROR
+(LAMBDA (ERRORN FN ARGS FORM)
+        (APPLY 'SYSERROR
+                (LIST ERRORN FN ARGS FORM>
+<SYSSEROR
+(LAMBDA (ERRORN FN ARGS FORM)
+        (ERRORMESS ERRORN)
+        (PRIN1 FN)
+        (PRIN1 '-)
+        (PRINT ARGS)
+        (RESET>
+ 
+>
+ 
+(PRINT '"LISP F4 READ -- 7 FEB 79")
+(PRINT '(VERSION 0))
+<DEFINEQ
+<BRSTK
+<LAMBDA (X)
+        (RPLACA BRSTK (PLUS X (CAR BRSTK)))
+        (COND ((ZEROP (CAR BRSTK))
+               (SETQ FLG NIL)
+               (SETQ BRSTK (CDRBRSTK)))
+              ((MINUSP (CAR BRSTK)) (SETQ OB NIL>>
+ 
+<READ-L
+(LAMBDA (S1 SN)
+        (PROG (X)
+         L    (SETQ X (READ-V))
+              (AND (EQ X '%)) (GO R))
+              (AND (NULL S1)
+                   <SETQ S1 (SETQ SN (LIST (READ-S X>
+                   (GO L))
+              (COND ((NEQ X '%)
+                     (RPLACD SN (LIST (READ-S X)))
+                     (SETQ SN (CDR SN))
+                     (GO L)))
+              (SETQ X (LIST X))
+              (SETQ X (READ-L X X))
+              (RPLACD SN
+                      (COND ((AND (LISTP (CDR X))
+                                  (NULL (CDDR X)))
+                             (CADR X))
+                            (T X)))
+         R    (RETURN S1)))>
+ 
+<READ-S
+(LAMBDA (X)
+        (SELECTQ X
+          (%( (READ-L))
+          (%) (BRSTK 1) NIL)
+          (%' (BRSTK 1)
+              (PROG1 (LIST 'QUOTE (READ-S (READ-V)))
+                     (BRSTK -1)))
+          X))>
+ 
+<READ-V
+(LAMBDA NIL
+        (OR FLG (SETQ OB (RATOM)))
+        (SELECTQ OB
+          (%< (SETQ BRSTK (CONS 1 BRSTK)) '%( )
+          (%> (SETQ FLG T) (BRSTK -1) '%) )
+          (%( (BRSTK 1) OB)
+          (%) (BRSTK -1) OB)
+          OB))>
+ 
+<*READ
+<LAMBDA NIL
+        (PROG (FLG OB (BRSTK (LIST 0)))
+              (RETURN (READ-S (READ-V>>
+ 
+>
+(SETQQ READFNS (BRSTK READ-L READ-S READ-V *READ))
+(SETQQ READCOMS "LISP F4 READ -- 7 FEB 79")
+(SETQ READGENNR 0)
+STOP
+ 
+(PRINT '"LISP F4 PRINT .. 26 FEB 79")
+(PRINT '(VERSION 0))
+<DEFINEQ
+<EDITFLAG
+(LAMBDA NIL (SYSFLAG 7))>
+ 
+<ESCAPEFLAG
+(LAMBDA NIL (SYSFLAG 5))>
+ 
+<LASTDEPTH
+<LAMBDA (S)
+        (PROG ((DEPTH LEVEL))
+         L    (COND ((OR (GREATERP DEPTH (PRINTLEVEL))
+                         (NLISTP S))
+                     (RETURN (DIFFERECE DEPTH LEVEL)))
+                    (T (SETQ DEPTH (ADD1 DEPTH))
+                       (SETQ S (UNKWLASTELT S))
+                       (GO L>>
+ 
+<LINEBREAK
+<LAMBDA (S)
+        (COND ((NULL PPBREAK) (SPACES 1))
+              (<AND (LISTP S)
+                    (LITATOM (CAR S))
+                    (EQUAL '(FSUBR . QUOTE) (GETPROP (CAR S) 'FNCELL>
+               <SETQ OLDCOL
+                     (LMARG (COND ((LESSP (NCHARS S) COMMENTLEN)
+                                    COMMENTCOL)
+                                  (T (TERPRI) (TERPRI) 10>
+               (TAB (LMARG))
+               (PPLAG NIL))
+              <(AND (EQ 1ST 'PROG) (GREATERP I 1))
+               (TAB (PLUS (LMARG)
+                          (COND ((ATOM S) -5) (0>
+              ((OR *LBEFORE (LISTP S)) (TAB (LMARG)))
+              ((SPACES 1>>
+ 
+<LMARG
+(LAMBDA (X) (IOTAB 7 X))>
+ 
+<MIN
+(LAMBDA (X Y) (COND ((LESSP X Y) X) (T Y)))>
+ 
+<PPFLAG
+(LAMBDA L (APPLY 'SYSFLG (CONS 2 L)))>
+ 
+<PRINT-A
+(LAMBDA (A)
+        (RPT *NKW '(PRIN1 "'"))
+        (PRIN0 A (ESCAPFLAG)))>
+ 
+<PRINT-L
+(LAMBDA (S RP)
+        (PROG (( I O)
+               (LEVEL (ADD1 LEVEL))
+               (LMARG (LMARG))
+               (OLDCOL O)
+               (1ST (CAR S))
+               PPBREAK X)
+              (RPT *NKW '(PRIN1 "'"))
+              (PRIN1 (COND (RP "(")
+                           ((AND (PPFLG)
+                                 (GREATERP
+                                   (SETQ RP (LASTDEPTH S))
+                                   *MAXPAR))
+                             "<")
+                            (T (SETQ RP O) "(")))
+              <COND ((PPFLAG)
+                     <SETQ PPBREAK
+                           (AND (LESSP LEVEL (PRINTLEVEL))
+                                (OR (EDITFLAG)
+                                    (GREATERP
+                                      (PLUS (PRINTPOS)
+                                            (NCHARS S))
+                                      (RMARG>
+                     (LMARG (MIN (PLUS -3 (RMARG))
+                                 (ADD1 (PRINTPOS>
+         L    (SETQ X (UNKWOTE (CAR S) T))
+              (OR (ZEROP I) (LINEBREAK X))
+              (PRINT-S X
+                (AND (NULL (SETQ S (CDR S))) RP))
+              (SETQ I (ADD1 I))
+              <AND (PPFLG)
+                   (EQ I 1)
+                   (NLISTP 1ST)
+                   (LESSP (PRINTPOS)
+                          (WEIGH (LMARG) (RMARG) *WEIGHT 1))
+                   (LMARG (ADD1 (PRINTPOS>
+              (COND ((NULL S))
+                    ((NLISTP S) (PRIN1 " . ") (PRINT-A S))
+                    (EQ I (PRINTLENGTH)) (PRIN1 "---"))
+                    ((GO L)))
+              (SELECTQ RP
+                (0 (PRIN1 ")"))
+                (1 (PRIN1 ">"))
+                NIL)
+              (LMARG LMARG)
+              (RETURN S)))>
+ 
+<PRINT-S
+<LAMBDA (S RP)
+        (AND (EQ LEVEL (PRINTLEVEL)) (SETQ S '...))
+        (COND ((NLISP S) (PRINT-A S) (SETQ *LBEFORE))
+              (T (PRINT-L S
+                    (SELECTQ RP ((0 NIL) RP) (SUB1 RP)))
+                 (SETQ *LBEFORE T)
+                 (SELECTQ OLDCOL
+                   (0)
+                   (PROG1 (SELECTQ
+                            (LMARG OLDCOL)
+                            (10 (TERPRI) (TERPRI))
+                            NIL)
+                          (PPFLAG T>>
+ 
+<QFLAG
+(LAMBDA NIL (SYSFLAG 3))>
+ 
+<RMARG
+(LAMBDA NIL (IOTAB 8))>
+ 
+<TAB
+(LAMBDA (X)
+        (AND (GREATERP (PRINTPOS) (SUB1 X)) (TERPRI))
+        (PRINTPOS X))>
+ 
+<UNKWLASTELT
+<LAMBDA (L)
+        (PROG ((I O))
+         L    (RETURN
+                (COND ((NULL (CDR L)) (UNKWOTE (CAR L)))
+                      ((EQ I (PRINTLENGTH)) '---)
+                      (T (SETQ I (ADD1 I))
+                         (SETQ L (CDR L))
+                         (GO L>>
+ 
+<UNKWOTE
+(LAMBDA (S FLAG)
+        (PROG NIL
+              (SETQ *COUNT 0)
+         L    (AND (QFLAG)
+                   (LISTP S)
+                   (EQ (CAR S) 'QUOTE)
+                   (LISTP (CDR S))
+                   (NULL (CDDR S))
+                   (SETQ *COUNT (ADD1 *COUNT))
+                   (SETQ S (CADR S))
+                   (GO L))
+              (AND FLAG (SETQ *NKW *COUNT))
+              (RETURN S)))>
+ 
+<WEIGH
+(LAMBDA (X1 X2 W1 W2)
+        (QUOTIENT
+          (PLUS (TIMES X1 W1) (TIMES X2 W2))
+          (PLUS W1 W2)))>
+ 
+<*PRINT
+(LAMBDA (X)
+        (PROG ((COMMENTCOL
+                 (QUOTIENT (TIMES 2 (RMARG)) 3))
+               <COMMENTLEN (PLUS -20 (TIMES 2 (RMARG>
+               (LEVEL 0)
+               (OLDCOL 0)
+               *COUNT *LBEFORE *NKW)
+              (PRINT-S (UNKWOTE X T))
+              (TERPRI)
+              (RETURN X)))>
+ 
+>
+        (EDITFLAG ESCAPEFLAG LASTDEPTH LINEBREAK LMARG MIN PPFLAG PRINT-A
+         PRINT-L PRINT-S QFLAG RMARG TAB UNKWLASTELT UNKWOTE WEIGH
+         *PRINT)
+(SETQQ PRINTVARS (*MAXPAR *WEIGHT))
+(SETQQ PRINTCOMS "LISP F4 PRINT -- 26 FEB 79")
+(SETQ PRINTGENNR 0)
+(SETQQ *MAXPAR 3)
+(SETQQ *WEIGHT 8)
+STOP
+ 
+APPENDIX C
+ 
+LIST OF FUNCTIONS.
+ 
+NAME(ARGS)                                  NAME(ARGS)
+ 
+ABS(N)                                      ADDLIST(A L)
+ADDPROP(A P V)                              ADD1(N)
+ADVISE(FN WHEN WHERE WHAT)                  ALIST()
+ALPHORDER(A B)                              AND L
+APPEND(L1 L2)                               APPLY(FN L)
+APPLYA(FN L AL)                             APPLYSTK(FN L POS)
+APPLY*(FN . L)                              ASSOC(A L)
+ATOM(S)
+ 
+BINDENV('V)
+BREAK 'L                                    BREAK0(FN WHEN COMS)
+BREAK1('BRKEXPR 'BRKWHEN 'BRKFN 'BRKCOMS)
+BREAK11(BRKEXPR BRKWHEN BRKFN BRKCOMS)
+ 
+CAAAR(S)                                    CAADR(S)
+CAAR(S)                                     CADAR(S)
+CADDR(S)                                    CADR(S)
+CAR(S)                                      CDAAR(S)
+CDADR(S)                                    CDAR(S)
+CDDAR(S)                                    CDDDR(S)
+CDDR(S)                                     CDR(S)
+CHTAB(A N)                                  CLOCK()
+CLOSE(FILE)                                 CONCAT
+COND(...)                                   CONS(S1 S2)
+COPY(S)                                     CURFILE('FILE)
+ 
+DE('FN 'ARGS . 'BODY)                       DEFINEQ 'L
+DF('FN 'ARGS . 'BODY)                       DIFFERENCE(N1 N2)
+DSORT(L)
+ 
+EDITF('FN . 'EDCOM)                         EDITS(S EDCOM)
+EJECT()                                     EQ(S1 S2)
+EQUAL(S1 S2)                                ERRORB()
+ERRORMESS(N)                                ERRORN()
+ERRORSET(ERRORFORM ERRFLG)                  EVAL(S)
+EVALA(S AL)                                 EVLIS(L)
+EVSTK(S POS)                                EXIT()
+ 
+FUNCTION('FN)
+ 
+GCGAG(FLAG)                                 GENSYM()
+GETD(FN)                                    GETINT(S FORM)
+GO*('LAB)                                   GREATERP(N1 N2)
+ 
+INUNIT(N)                                   IOTAB(N1 N2)
+ 
+LAST(L)                                     LENGTH(L)
+LESSP(N1 N2)                                LISPX()
+LIST L                                      LISTP(S)
+LITATOM(S)                                  LOAD(FILE)
+ 
+MAKEFILE(FILE FLAG)                         MAP(L FN1 FN2)
+MAPC(L FN1 FN2)                             MAPLIST L FN1 FN2)
+MEMB(A L)                                   MEMBER(A L)
+MINUS(N)                                    MINUSP(N)
+MKATOM(S)                                   MKSTRING(S)
+ 
+NCHARS(S)                                   NCONC(L1 L2)
+NLISTP(S)                                   NTH(L N)
+NULL(S)                                     NUMBERP(S)
+ 
+OBLIST(A)                                   OPEN(FILE OPT N)
+OPEN0(FILE INFLG BINFLG)                    OR L
+OUTUNIT(N)
+ 
+PACK(S FLAG)                                PLUS L
+PP 'L                                       PRINT(S)
+PRINTDEF(S)                                 PRINTL L
+PRINTLENGTH(N)                              PRINTLEVEL(N)
+PRINTL-SP L                                 PRINTPOS(N)
+PRIN0(S ESCFLG PPFLG)                       PRIN1(S)
+PRIN2(S)                                    PROG(...)
+PROGN L                                     PROG1 L
+PROMPTTEXT(TXT)
+PUTPROP(A P V)                              PUTD(FN S)
+PUTINT(S X FORM)
+ 
+QUOTE('S)                                   QUOTIENT(N1 N2)
+ 
+RATOM()                                     READ()
+READC()                                     READPOS()
+READVISE 'L                                 REBREAK 'L
+RECLAIM(N)                                  REMOVE(A L)
+REMPROP(A P)                                RESET()
+RETURN(S)                                   REVERSE(L)
+REWIND(N)                                   ROLLIN(N)
+ROLLOUT(N)                                  RPLACA(S1 S2)
+RPLACD(S1 S2)                               RPLSTRING(S1 N S2)
+RPT(N S)                                    RPTQ(N 'S)
+ 
+SASSOC(A L)                                 SAVEDEF(FN)
+SELECTQ(...)                                SET(A S)
+SETQ('A S)                                  SETQQ(A S)
+SIGN(N)                                     SPACES(N)
+STRALLOC(N C)                               STREQUAL(S1 S2)
+STRINGP(S)                                  SUBPR(A B S)
+SUBSTRING(S N1 N2)                          SUB1(N)
+SYSERROR(ERRTYPE FN ARG FORM)               SYSFLAG(N)
+ 
+TERPRI()                                    TIMES L
+TRACE 'L
+ 
+UNADVISE 'L                                 UNBREAK 'L
+UNPACK(S FLAG)                              UNSAVEDEF(FN)
+UNTRACE 'L
+ 
+VIRGINFN(FN)
+ 
+XCALL(FN L)
+ 
+ZEROP(N)
+ 
+APPENDIX D
+ 
+REFERENCES.
+ 
+Ha 75   A. Haraldsson:      "LISP-DETAILS.  INTERLISP 360/370."
+                             DLU 75/9
+Sc 67   H. Schon etc.       "An efficient machine independent
+                             procedure for ..." CACM Aug 1967.

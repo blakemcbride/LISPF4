@@ -1,0 +1,215 @@
+ ()<>"'..T+-0123456789%^E#
+(
+NIL
+BTV*
+CLOCK
+DATE
+EJECT
+EXIT
+GENSYM
+LISPX
+RATOM
+READ
+READC
+READP
+RESET
+TERPRI
+TIME
+)
+
+(
+ADD1
+ERRORMESS
+RECLAIM
+ROLLIN
+ROLLOUT
+SUB1
+REWIND
+)
+
+(
+ALIST
+ARRAYSIZE
+ARRAYP
+ATOM
+CAR
+CDR
+CAAR
+CADR
+CDAR
+CDDR
+CAAAR
+CAADR
+CADAR
+CADDR
+CDAAR
+CDADR
+CDDAR
+CDDDR
+EVAL
+EVLIS
+FIXP
+FLOATP
+GETD
+LAST
+LENGTH
+LISTP
+LITATOM
+NLISTP
+NULL
+NUMBERP
+OBLIST
+PROG1
+PROMPTTEXT
+RETURN
+REVERSE
+STRINGP
+ZEROP
+)
+
+(
+ADDLIST
+ALPHORDER
+APPEND
+APPLY
+ASSOC
+CHTAB
+CONS
+DIFFERENCE
+ELT
+ELTI
+ELTR
+EQ
+EQUAL
+EVALA
+EVSTK
+GETPROP
+GREATERP
+IOTAB
+IQUOREM
+LESSP
+MEMB
+MEMBER
+NCHARS
+NCONC
+NCONC1
+NEQ
+NTH
+PACK
+QUOTIENT
+RPLACA
+RPLACD
+RPT
+SASSOC
+SET
+STRALLOC
+TAILP
+UNPACK
+XCALL
+)
+
+(
+APPLYA
+APPLYSTK
+ARRAY
+MAP
+MAPC
+MAPCAR
+MAPLIST
+OPEN0
+PRIN0
+PUTPROP
+RPLSTRING
+SETA
+SETI
+SETR
+SUBPAIR
+SUBSTRING
+SYSERROR
+)
+
+(
+CONCAT
+LIST
+PLUS
+SYSFLAG
+TIMES
+)
+
+(
+AND
+BINDENV
+COND
+FUNCTION
+GO
+GO*
+OR
+PROG
+PROGN
+QUOTE
+SELECTQ
+SETQ
+)
+
+A000
+APPLY
+EVAL
+FNCELL
+FSUBR
+FUNARG
+LAMBDA
+LISPF4-ARRAY
+LISPF4-STRING
+LISPF4-SUBSTRING
+LISPX
+NLAMBDA
+NOBIND
+PROG
+QUOTE
+SUBR
+SYSERROR
+*FORM
+*INTERN
+-*-
+.
+T
+--- Unbound variable
+--- Undefined function
+--- Compacting GBC. Free cells =
+Exit from Lisp F4
+--- Undefined label
+--- RETURN outside PROG
+--- Illegal argument (subr1)
+--- Illegal argument (subr2)
+--- Illegal argument (subr3)
+--- Illegal argument (subrn)
+--- Fatal parameterstack overflow
+--- Stack overflow
+--- LISPX drop-thru
+***  Bottom  ***
+--- Parameter stack owerflow 15
+--- Invalid stack pointer
+--- Reset
+--- Illegal environment 18
+--- Big number GBC. Bignum space =
+Lisp F4 , latest update =
+--- Argument not an array
+Space (cells smallnum bignums atoms) =
+--- Illegal argument (fsubr)
+--- Non-recursive GBC called
+--- Bignum space empty. 0 returned
+--- Keyboard interrupt
+--- User break
+--- Array index out of bounds
+--- Bad substring. NIL printed
+Bye
+--- Faulty funarg block
+--- EOF read from standard input
+--- Atom space empty. NIL returned
+--- Free cell space almost exhausted
+--- GBC. Free cells =
+--- List space empty
+--- Bignum/atom space almost exhausted
+--- Bignum/atom GBC. Atom space =
+GBC:s (cell compacting num num/atom) =
+Environment    Top
