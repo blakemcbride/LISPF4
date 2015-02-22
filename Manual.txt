@@ -93,7 +93,7 @@ The forms (SUBR . FOO) and (FSUBR . FOO) are simulated function
 indicators and legal function arguments to apply.
  
 Ex.:
-        (DE KAR(X) ((SUBR . CAR) X>
+        (DE KAR(X) ((SUBR . CAR) X]
  
 This definition of KAR causes KAR to behave exactly as CAR,
 independently of whether CAR has been redefined to something else.
@@ -171,7 +171,7 @@ To get a stkpos you use the function BINDENV
            get an error. This means that you can only
            get lisp to start searching at a block boundary.
 
-_(DE TEST (BAR)(PROG () (PRINT BAR)(PRINT (EVSTK 'BAR (BINDENV BAR>
+_(DE TEST (BAR)(PROG () (PRINT BAR)(PRINT (EVSTK 'BAR (BINDENV BAR]
 TEST
  
 _(SETQ BAR 88)
@@ -197,7 +197,7 @@ Two safe definitions of RPTQ and SETQQ are:
         (APPLYSTK 'RPT (LIST (EVSTK N (BINDENV N)) X) (BINDENV N))))
 
 (SETQQ
-  <NLAMBDA L (APPLYSTK 'SET L (BINDENV L>)
+  [NLAMBDA L (APPLYSTK 'SET L (BINDENV L])
 
 
 To look at the stack there is the function BTV*
@@ -224,18 +224,18 @@ _(PP FUM)
 _(BAR 567)
 Environment    Tops  
      11         13
-#13  <0  11>
+#13  [0  11]
 #12  *FORM (BTV*)
-#11  <-8  8>
+#11  [-8  8]
 #10  L (568 77)
 #9   *FORM (FUM (LIST X 77))
-#8   <-5  5>
+#8   [-5  5]
 #7   X 568
 #6   *FORM (FOO (ADD1 U))
-#5   <0  2>
+#5   [0  2]
 #4   U 567
 #3   *FORM (BAR 567)
-#2   <0  0>
+#2   [0  0]
 #1   *FORM (LISPX)
 ***  Bottom  ***    
  
@@ -257,7 +257,7 @@ _(PP A)
   
 (A)
  
-_(DE B(Z W)(SETQ R1 (ALIST))(SETQ R2(ALIST T>
+_(DE B(Z W)(SETQ R1 (ALIST))(SETQ R2(ALIST T]
 B
  
 _(PP B)
@@ -335,7 +335,7 @@ a)          INPUT CHARACTERS OF SPECIAL MEANING.
 %           escape character
 '           QUOTE character
 " "         string character
-<>          super brackets
+[]          super brackets
  
 All those characters works the same as in INTERLISP.
  
@@ -359,8 +359,8 @@ table is standard.
         1             space
         2             (
         3             )
-        4             <
-        5             >
+        4             [
+        5             ]
         6             "
         7             '
         8             user break
@@ -374,10 +374,10 @@ table is standard.
         25            E  exponent
         26            # = square bracket
  
-Ex.:  If you want to have $ as a super bracket, and > as an ordinary
+Ex.:  If you want to have $ as a super bracket, and ] as an ordinary
 letter do:
  
-        (SETQ TYPE (CHTAB '%> (CHTAB 'A>
+        (SETQ TYPE (CHTAB '%] (CHTAB 'A]
         (CHTAB '$ TYPE)
 and if you want to have * as a break character do
         (CHTAB '* 8)
@@ -569,8 +569,8 @@ logical unit 25.
                                     MAKEFILE prompt you for logical unit
                                     number of MYFILE)
         (CURFILE MYFILE)
-        (DE ....>
-        (DE ....>
+        (DE ....]
+        (DE ....]
         etc.
         (MAKEFILE 'MYFILE T)
  
@@ -779,14 +779,14 @@ ERRORSET is defined as:
  (DE ERRORSET (ERRORFORM ERRFLG)
              (PROG NIL
                    (RETURN (LIST (EVAL ERRORFORM)))
-               ERRORSET>
+               ERRORSET]
  
 and SYSERROR is defined as:
  
 (DE SYSERROR (ERRORTYPE FN ARG FORM)
              - print message if ERRORFLG = T -
              (GO* ERRORSET)
-             (BREAK11 FORM T NIL>
+             (BREAK11 FORM T NIL]
  
 When SYSERROR is called it tries to jump to the label ERRORSET.  If it
 succeeds (error occurred under errorset) a "big jump" to ERRORSET is
@@ -948,7 +948,7 @@ MAXLUN     The largest logical unit number allowed
 IOBUFF     Size of ABUFF, BUFF,RDBUFF and PRBUFF
            Normally = 150.
 NCHTYP=c   No of different "character types"
-           such as ( ) < > etc.
+           such as ( ) [ ] etc.
 NAREA      Length of common /B/ from ARG to
            DREG(7).
  
@@ -1918,8 +1918,8 @@ parameter A) as follows:
       '            4            NIL
       .            5          the atom .
  
-RATOM keeps < and > in a separate bracket stack and (if called from
-IREAD) < or > are never seen but returned as ( or as a proper number
+RATOM keeps [ and ] in a separate bracket stack and (if called from
+IREAD) [ or ] are never seen but returned as ( or as a proper number
 of )'s.
  
 6.3 SUBROUTINE SHIFT(I).
@@ -2316,47 +2316,47 @@ DEFINITION OF EVAL APPLY READ AND PRINT.
 as it is the definition of the old LISPF3 system that used an
 A-list to keep variable bindings. This system use a stack instead.)
  
-<DEFINEQ
-<LISPF4
+[DEFINEQ
+[LISPF4
 (LAMBDA (N)
         (PROG (EVALSW ERRFN ALIST *BACKTRACE *BACKTRACEFLG)
         (AND (EQ N 1) (PRINT "LISP F4 etc."))
         (RESET)
         (APPLY 'LISPX NIL)
-        (ERROR 25 'LISPX NIL NIL>
-<LISPX
+        (ERROR 25 'LISPX NIL NIL]
+[LISPX
 (LAMBDA NIL
         (PROG NIL
          LOOP (PRINT (EVAL (READ)))
-              (GO LOOP>
-<EVAL
+              (GO LOOP]
+[EVAL
 (LAMBDA (FORM)
         (COND ((OR (NUMBERP FORM) (STRINGP FORM)) FORM)
               ((ATOM FORM)
-               <COND ((FORM_ON_ALIST?) (USE_BOUND_VALUE))
+               [COND ((FORM_ON_ALIST?) (USE_BOUND_VALUE))
                      ((NEQ (CAR FORM) 'NOBIND) (CAR FORM))
                      (T (SETQ EVALSW T)
                         (SETQ ERRFN 'EVAL)
-                        (EAPPLY (CAR FORM) (CDR FORM>
-<APPLY
+                        (EAPPLY (CAR FORM) (CDR FORM]
+[APPLY
 (LAMBDA (FN ARGS)
         (SETQ EVALSW NIL)
         (SETQ ERRFN 'APPLY)
         (SETQ FORM (CONS FN ARGS))
-        (AND FN (EAPPLY FN ARGS>
-<EAPPLY
+        (AND FN (EAPPLY FN ARGS]
+[EAPPLY
 (LAMBDA (FN ARGS)
         (COND ((LITATOM FN)
-               <COND ((GETD FN) (APPLYFN2 (GETD FN) ARGS))
-                     (T (ERROR 2 ERRFN FN FORM>)
-              (T (APPLYFN2 FN ARGS>
-<APPLYFN1
+               [COND ((GETD FN) (APPLYFN2 (GETD FN) ARGS))
+                     (T (ERROR 2 ERRFN FN FORM])
+              (T (APPLYFN2 FN ARGS]
+[APPLYFN1
 (LAMBDA (FN ARGS)
         (COND ((SUBRP FN) (AND EVALSW (SETQ ARGS (EVLIS ARGS)))
                           (SAPPLY FN ARGS))
               ((FSUBRP FN) (SAPPLY FN ARGS))
-              (T (ERROR 2 ERRFN FN FORM>
-<APPLYFN2
+              (T (ERROR 2 ERRFN FN FORM]
+[APPLYFN2
 (LAMBDA (FN ARGS)
         (COND ((NLISTP FN) (ERROR 2 ERRFN FN FORM))
               (T (SELECTQ (CAR FN)
@@ -2368,8 +2368,8 @@ A-list to keep variable bindings. This system use a stack instead.)
                            (SETQ ALIST (CADDR FN))
                            (SETQ RES (EAPPLY (CADR FN) ARGS))
                            RES)
-                   (ERROR 2 ERRFN FN FORM>
-<LAPPLY
+                   (ERROR 2 ERRFN FN FORM]
+[LAPPLY
 (LAMBDA (FN ARGS)
         (AND *BACKTRACEFLG
              (SETQ *BACKTRACE (CONS FORM *BACKTRACE)))
@@ -2377,47 +2377,47 @@ A-list to keep variable bindings. This system use a stack instead.)
         (SETQ RES (EVLAST (CDDR FN)))
         (AND *BACKTRACEFLG
              (SETQ *BACKTRACE (CDR *BACKTRACE)))
-        RES>
-<SAPPLY
+        RES]
+[SAPPLY
 (LAMBDA (FN ARGS)
-        (JUMP_TO_CODE_FOR_FN>
-<GETD
+        (JUMP_TO_CODE_FOR_FN]
+[GETD
 (LAMBDA (FN)
         (CONS ((GETPROP FN 'FNCELL))
               ((SUBRP FN) (CONS 'SUBR FN))
-              ((FSUBRP FN) (CONS 'FSUBR FN>
-<ERROR
+              ((FSUBRP FN) (CONS 'FSUBR FN]
+[ERROR
 (LAMBDA (ERRORN FN ARGS FORM)
         (APPLY 'SYSERROR
-                (LIST ERRORN FN ARGS FORM>
-<SYSSEROR
+                (LIST ERRORN FN ARGS FORM]
+[SYSSEROR
 (LAMBDA (ERRORN FN ARGS FORM)
         (ERRORMESS ERRORN)
         (PRIN1 FN)
         (PRIN1 '-)
         (PRINT ARGS)
-        (RESET>
+        (RESET]
  
->
+]
  
 (PRINT '"LISP F4 READ -- 7 FEB 79")
 (PRINT '(VERSION 0))
-<DEFINEQ
-<BRSTK
-<LAMBDA (X)
+[DEFINEQ
+[BRSTK
+[LAMBDA (X)
         (RPLACA BRSTK (PLUS X (CAR BRSTK)))
         (COND ((ZEROP (CAR BRSTK))
                (SETQ FLG NIL)
                (SETQ BRSTK (CDRBRSTK)))
-              ((MINUSP (CAR BRSTK)) (SETQ OB NIL>>
+              ((MINUSP (CAR BRSTK)) (SETQ OB NIL]]
  
-<READ-L
+[READ-L
 (LAMBDA (S1 SN)
         (PROG (X)
          L    (SETQ X (READ-V))
               (AND (EQ X '%)) (GO R))
               (AND (NULL S1)
-                   <SETQ S1 (SETQ SN (LIST (READ-S X>
+                   [SETQ S1 (SETQ SN (LIST (READ-S X]
                    (GO L))
               (COND ((NEQ X '%)
                      (RPLACD SN (LIST (READ-S X)))
@@ -2430,9 +2430,9 @@ A-list to keep variable bindings. This system use a stack instead.)
                                   (NULL (CDDR X)))
                              (CADR X))
                             (T X)))
-         R    (RETURN S1)))>
+         R    (RETURN S1)))]
  
-<READ-S
+[READ-S
 (LAMBDA (X)
         (SELECTQ X
           (%( (READ-L))
@@ -2440,24 +2440,24 @@ A-list to keep variable bindings. This system use a stack instead.)
           (%' (BRSTK 1)
               (PROG1 (LIST 'QUOTE (READ-S (READ-V)))
                      (BRSTK -1)))
-          X))>
+          X))]
  
-<READ-V
+[READ-V
 (LAMBDA NIL
         (OR FLG (SETQ OB (RATOM)))
         (SELECTQ OB
-          (%< (SETQ BRSTK (CONS 1 BRSTK)) '%( )
-          (%> (SETQ FLG T) (BRSTK -1) '%) )
+          (%[ (SETQ BRSTK (CONS 1 BRSTK)) '%( )
+          (%] (SETQ FLG T) (BRSTK -1) '%) )
           (%( (BRSTK 1) OB)
           (%) (BRSTK -1) OB)
-          OB))>
+          OB))]
  
-<*READ
-<LAMBDA NIL
+[*READ
+[LAMBDA NIL
         (PROG (FLG OB (BRSTK (LIST 0)))
-              (RETURN (READ-S (READ-V>>
+              (RETURN (READ-S (READ-V]]
  
->
+]
 (SETQQ READFNS (BRSTK READ-L READ-S READ-V *READ))
 (SETQQ READCOMS "LISP F4 READ -- 7 FEB 79")
 (SETQ READGENNR 0)
@@ -2465,56 +2465,56 @@ STOP
  
 (PRINT '"LISP F4 PRINT .. 26 FEB 79")
 (PRINT '(VERSION 0))
-<DEFINEQ
-<EDITFLAG
-(LAMBDA NIL (SYSFLAG 7))>
+[DEFINEQ
+[EDITFLAG
+(LAMBDA NIL (SYSFLAG 7))]
  
-<ESCAPEFLAG
-(LAMBDA NIL (SYSFLAG 5))>
+[ESCAPEFLAG
+(LAMBDA NIL (SYSFLAG 5))]
  
-<LASTDEPTH
-<LAMBDA (S)
+[LASTDEPTH
+[LAMBDA (S)
         (PROG ((DEPTH LEVEL))
          L    (COND ((OR (GREATERP DEPTH (PRINTLEVEL))
                          (NLISTP S))
                      (RETURN (DIFFERECE DEPTH LEVEL)))
                     (T (SETQ DEPTH (ADD1 DEPTH))
                        (SETQ S (UNKWLASTELT S))
-                       (GO L>>
+                       (GO L]]
  
-<LINEBREAK
-<LAMBDA (S)
+[LINEBREAK
+[LAMBDA (S)
         (COND ((NULL PPBREAK) (SPACES 1))
-              (<AND (LISTP S)
+              ([AND (LISTP S)
                     (LITATOM (CAR S))
-                    (EQUAL '(FSUBR . QUOTE) (GETPROP (CAR S) 'FNCELL>
-               <SETQ OLDCOL
+                    (EQUAL '(FSUBR . QUOTE) (GETPROP (CAR S) 'FNCELL]
+               [SETQ OLDCOL
                      (LMARG (COND ((LESSP (NCHARS S) COMMENTLEN)
                                     COMMENTCOL)
-                                  (T (TERPRI) (TERPRI) 10>
+                                  (T (TERPRI) (TERPRI) 10]
                (TAB (LMARG))
                (PPLAG NIL))
-              <(AND (EQ 1ST 'PROG) (GREATERP I 1))
+              [(AND (EQ 1ST 'PROG) (GREATERP I 1))
                (TAB (PLUS (LMARG)
-                          (COND ((ATOM S) -5) (0>
+                          (COND ((ATOM S) -5) (0]
               ((OR *LBEFORE (LISTP S)) (TAB (LMARG)))
-              ((SPACES 1>>
+              ((SPACES 1]]
  
-<LMARG
-(LAMBDA (X) (IOTAB 7 X))>
+[LMARG
+(LAMBDA (X) (IOTAB 7 X))]
  
-<MIN
-(LAMBDA (X Y) (COND ((LESSP X Y) X) (T Y)))>
+[MIN
+(LAMBDA (X Y) (COND ((LESSP X Y) X) (T Y)))]
  
-<PPFLAG
-(LAMBDA L (APPLY 'SYSFLG (CONS 2 L)))>
+[PPFLAG
+(LAMBDA L (APPLY 'SYSFLG (CONS 2 L)))]
  
-<PRINT-A
+[PRINT-A
 (LAMBDA (A)
         (RPT *NKW '(PRIN1 "'"))
-        (PRIN0 A (ESCAPFLAG)))>
+        (PRIN0 A (ESCAPFLAG)))]
  
-<PRINT-L
+[PRINT-L
 (LAMBDA (S RP)
         (PROG (( I O)
                (LEVEL (ADD1 LEVEL))
@@ -2528,42 +2528,42 @@ STOP
                                  (GREATERP
                                    (SETQ RP (LASTDEPTH S))
                                    *MAXPAR))
-                             "<")
+                             "[")
                             (T (SETQ RP O) "(")))
-              <COND ((PPFLAG)
-                     <SETQ PPBREAK
+              [COND ((PPFLAG)
+                     [SETQ PPBREAK
                            (AND (LESSP LEVEL (PRINTLEVEL))
                                 (OR (EDITFLAG)
                                     (GREATERP
                                       (PLUS (PRINTPOS)
                                             (NCHARS S))
-                                      (RMARG>
+                                      (RMARG]
                      (LMARG (MIN (PLUS -3 (RMARG))
-                                 (ADD1 (PRINTPOS>
+                                 (ADD1 (PRINTPOS]
          L    (SETQ X (UNKWOTE (CAR S) T))
               (OR (ZEROP I) (LINEBREAK X))
               (PRINT-S X
                 (AND (NULL (SETQ S (CDR S))) RP))
               (SETQ I (ADD1 I))
-              <AND (PPFLG)
+              [AND (PPFLG)
                    (EQ I 1)
                    (NLISTP 1ST)
                    (LESSP (PRINTPOS)
                           (WEIGH (LMARG) (RMARG) *WEIGHT 1))
-                   (LMARG (ADD1 (PRINTPOS>
+                   (LMARG (ADD1 (PRINTPOS]
               (COND ((NULL S))
                     ((NLISTP S) (PRIN1 " . ") (PRINT-A S))
                     (EQ I (PRINTLENGTH)) (PRIN1 "---"))
                     ((GO L)))
               (SELECTQ RP
                 (0 (PRIN1 ")"))
-                (1 (PRIN1 ">"))
+                (1 (PRIN1 "]"))
                 NIL)
               (LMARG LMARG)
-              (RETURN S)))>
+              (RETURN S)))]
  
-<PRINT-S
-<LAMBDA (S RP)
+[PRINT-S
+[LAMBDA (S RP)
         (AND (EQ LEVEL (PRINTLEVEL)) (SETQ S '...))
         (COND ((NLISP S) (PRINT-A S) (SETQ *LBEFORE))
               (T (PRINT-L S
@@ -2575,30 +2575,30 @@ STOP
                             (LMARG OLDCOL)
                             (10 (TERPRI) (TERPRI))
                             NIL)
-                          (PPFLAG T>>
+                          (PPFLAG T]]
  
-<QFLAG
-(LAMBDA NIL (SYSFLAG 3))>
+[QFLAG
+(LAMBDA NIL (SYSFLAG 3))]
  
-<RMARG
-(LAMBDA NIL (IOTAB 8))>
+[RMARG
+(LAMBDA NIL (IOTAB 8))]
  
-<TAB
+[TAB
 (LAMBDA (X)
         (AND (GREATERP (PRINTPOS) (SUB1 X)) (TERPRI))
-        (PRINTPOS X))>
+        (PRINTPOS X))]
  
-<UNKWLASTELT
-<LAMBDA (L)
+[UNKWLASTELT
+[LAMBDA (L)
         (PROG ((I O))
          L    (RETURN
                 (COND ((NULL (CDR L)) (UNKWOTE (CAR L)))
                       ((EQ I (PRINTLENGTH)) '---)
                       (T (SETQ I (ADD1 I))
                          (SETQ L (CDR L))
-                         (GO L>>
+                         (GO L]]
  
-<UNKWOTE
+[UNKWOTE
 (LAMBDA (S FLAG)
         (PROG NIL
               (SETQ *COUNT 0)
@@ -2611,27 +2611,27 @@ STOP
                    (SETQ S (CADR S))
                    (GO L))
               (AND FLAG (SETQ *NKW *COUNT))
-              (RETURN S)))>
+              (RETURN S)))]
  
-<WEIGH
+[WEIGH
 (LAMBDA (X1 X2 W1 W2)
         (QUOTIENT
           (PLUS (TIMES X1 W1) (TIMES X2 W2))
-          (PLUS W1 W2)))>
+          (PLUS W1 W2)))]
  
-<*PRINT
+[*PRINT
 (LAMBDA (X)
         (PROG ((COMMENTCOL
                  (QUOTIENT (TIMES 2 (RMARG)) 3))
-               <COMMENTLEN (PLUS -20 (TIMES 2 (RMARG>
+               [COMMENTLEN (PLUS -20 (TIMES 2 (RMARG]
                (LEVEL 0)
                (OLDCOL 0)
                *COUNT *LBEFORE *NKW)
               (PRINT-S (UNKWOTE X T))
               (TERPRI)
-              (RETURN X)))>
+              (RETURN X)))]
  
->
+]
         (EDITFLAG ESCAPEFLAG LASTDEPTH LINEBREAK LMARG MIN PPFLAG PRINT-A
          PRINT-L PRINT-S QFLAG RMARG TAB UNKWLASTELT UNKWOTE WEIGH
          *PRINT)
