@@ -1,6 +1,6 @@
 
 
-8/23/00 (revised 5/28/10)
+8/23/00 (revised 2/21/15)
 
 Blake McBride
 blake@mcbride.name
@@ -149,6 +149,9 @@ The raw system is case sensitive and all the built in functions are in
 upper case.  BASIC.IMG has a lisp file loaded which sets an option to
 cause lispf4 to up shift all input so the system becomes case
 insensitive.
+
+Lispf4 came with the super-parenthesis defined as <>.  I changed that
+to [] in order to match InterLisp.
 
 To exit the system just type:   (EXIT)
 
