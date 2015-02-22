@@ -4,18 +4,18 @@
  (DEFINEQ
  (PROGS
    (NLAMBDA $MACRO$
-            (EVAL (<LAMBDA (L)
+            (EVAL ([LAMBDA (L)
                            (LIST 'PROG
                                  (GETPROP '**STATIC** (CAR L))
                                  (LIST 'RETURN
                                        (LIST 'PROG1
                                              (CONS 'PROG
                                                (APPEND (CDR L) NIL))
-                                             (LIST 'SAVE-STATIC (CAR L>
+                                             (LIST 'SAVE-STATIC (CAR L]
                     $MACRO$))))
    
  (SAVE-STATIC
-   <NLAMBDA (N ENV)
+   [NLAMBDA (N ENV)
             (SETQ ENV (BINDENV N))
             (PUTPROP '**STATIC** N
                      (MAPCAR (GETPROP '**STATIC** N)
@@ -23,18 +23,18 @@
                                 (X)
                                 (LIST (CAR X)
                                       (LIST 'QUOTE
-                                            (EVSTK (CAR X) ENV>)
+                                            (EVSTK (CAR X) ENV])
    
  (DELETE-STATIC
    (NLAMBDA (N L)
             (COND ((NULL L) (REMPROP '**STATIC** N))
                   (T (AND (ATOM L) (SETQ L (CONS L NIL)))
-                     <PUTPROP '**STATIC** N
+                     [PUTPROP '**STATIC** N
                        (SUBSET
                          (GETPROP '**STATIC** N)
                          '(LAMBDA
                             (X)
-                            (COND ((MEMB (CAR X) L) NIL) (X>
+                            (COND ((MEMB (CAR X) L) NIL) (X]
                      N))))
    
  (GET-STATIC
@@ -42,7 +42,7 @@
    
  (ADD-STATIC
    (NLAMBDA (N L)
-            <PUTPROP '**STATIC** N
+            [PUTPROP '**STATIC** N
                      (NCONC (GETPROP '**STATIC** N)
                             (MAPCAR L
                               '(LAMBDA
@@ -53,12 +53,12 @@
                                             (LIST 'QUOTE
                                               (EVSTK
                                                 (CADR L)
-                                                (BINDENV N>
+                                                (BINDENV N]
             N))
    
  (CREATE-STATIC
    (NLAMBDA (N L)
-            <PUTPROP '**STATIC** N
+            [PUTPROP '**STATIC** N
                      (MAPCAR L
                              '(LAMBDA
                                 (L)
@@ -68,7 +68,7 @@
                                            (LIST 'QUOTE
                                              (EVSTK
                                                (CADR L)
-                                               (BINDENV N>
+                                               (BINDENV N]
             N))
    
  )

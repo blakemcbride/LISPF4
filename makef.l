@@ -17,8 +17,8 @@
   (NLAMBDA (A) (APPLY* 'CURFILE A) (PRINT (LIST 'FILEHEADER A))))
   
 (LOAD
-  <LAMBDA (FILE LDFLG PRINTFLG)
-          (PROG (<AL (SUBST LDFLG '* '((LDFLG . *> FILENR UNIT X)
+  [LAMBDA (FILE LDFLG PRINTFLG)
+          (PROG ([AL (SUBST LDFLG '* '((LDFLG . *] FILENR UNIT X)
                 (OR (SETQ FILENR (OPEN 20 FILE 'OLD 'FORMATTED))
                     (PROGN (PRINTL-SP "CAN NOT OPEN" FILE) (RETURN)))
                 (SETQ UNIT (INUNIT FILENR))
@@ -31,7 +31,7 @@
                     (CLOSE FILENR)
                     (RETURN FILE))
                   (COND (PRINTFLG (PRINT (EVALA X AL)) (GO LOOP))
-                        (T (EVALA X AL) (GO LOOP>)
+                        (T (EVALA X AL) (GO LOOP])
   
 (MAKEF/EVAL
   (LAMBDA (X) (CAR (APPLYSTK 'ERRORSET (LIST X) AL))))
@@ -40,14 +40,14 @@
   (LAMBDA (L) (PRINTL "(DEFINEQ") (PRETTYPRINT L OPT) (PRINTL ")")))
   
 (MAKEF/GETPROPS
-  <LAMBDA (L)
+  [LAMBDA (L)
           (COND ((NLISTP L) NIL)
                 ((MEMB (CAR L) SYSPROPS)
                   (MAKEF/GETPROPS (CDDR L)))
-                <(OR NIL* (CADR L))
+                [(OR NIL* (CADR L))
                   (CONS (CAR L)
-                        (CONS (CADR L) (MAKEF/GETPROPS (CDDR L>
-                (T (MAKEF/GETPROPS (CDDR L>)
+                        (CONS (CADR L) (MAKEF/GETPROPS (CDDR L]
+                (T (MAKEF/GETPROPS (CDDR L])
   
 (MAKEF/MAPC*
   (LAMBDA (L FN)
@@ -62,36 +62,36 @@
            (TERPRI)))
   
 (MAKEF/PROPX
-  <LAMBDA (PROPS L NIL*)
-          (COND <(EQ PROPS 'ALL)
+  [LAMBDA (PROPS L NIL*)
+          (COND [(EQ PROPS 'ALL)
                   (MAKEF/MAPC* L
                     '(LAMBDA (X)
-                             <SETQ X
-                                   (CONS X (MAKEF/GETPROPS (CDR X>
+                             [SETQ X
+                                   (CONS X (MAKEF/GETPROPS (CDR X]
                              (COND ((CDR X)
                                      (PRIN0 (CONS 'PUTPROPS X) T OPT)
-                                     (TERPRI>
+                                     (TERPRI]
                 ((ATOM PROPS) (MAKEF/PROPX (LIST PROPS) L NIL*))
                 (T (MAPC PROPS
                          '(LAMBDA
                             (P RES)
-                            <MAKEF/MAPC* L
+                            [MAKEF/MAPC* L
                               '(LAMBDA
                                  (X)
                                  (AND (OR NIL* (GETPROP X P))
                                       (SETQ RES
                                             (CONS
                                               (LIST X (GETPROP X P))
-                                              RES>
+                                              RES]
                             (AND RES
                                  (MAKEF/OUT DEFLIST
                                    (LIST 'QUOTE (REVERSE RES))
-                                   (LIST 'QUOTE P>)
+                                   (LIST 'QUOTE P])
   
 (MAKEF/VARSX
-  <LAMBDA (L)
+  [LAMBDA (L)
           (MAKEF/MAPC* L
-            '(LAMBDA (X) (MAKEF/OUT RPAQQ X (MAKEF/EVAL X>)
+            '(LAMBDA (X) (MAKEF/OUT RPAQQ X (MAKEF/EVAL X])
   
 (MAKEFILE
   (LAMBDA (FILE XFILE OPT)
@@ -102,10 +102,10 @@
                   UNIT FILENR FNSV VARSV COMSV GENV
                   (AL (BINDENV FILE))
                   GBC DEPTH LENGTH)
-                <COND <(NULL (SETQ COMSV (ERRORSET COMS NIL)))
+                [COND [(NULL (SETQ COMSV (ERRORSET COMS NIL)))
                         (PRINTL-SP "GIVE VALUE TO VARIABLE" COMS)
-                        (SET COMS (SETQ COMSV (READ>
-                      (T (SETQ COMSV (CAR COMSV>
+                        (SET COMS (SETQ COMSV (READ]
+                      (T (SETQ COMSV (CAR COMSV]
                 (SETQ FNSV (CAR (ERRORSET FNS NIL)))
                 (SETQ VARSV (CAR (ERRORSET VARS NIL)))
                 (OR FNSV VARSV
@@ -113,8 +113,8 @@
                            (RETURN)))
                 (OR (SETQ FILENR (OPEN 20 XFILE 'NEW 'FORMATTED))
                     (PROGN (PRINTL-SP "CAN NOT OPEN" XFILE) (RETURN)))
-                (COND <(CAR (ERRORSET '(NUMBERP (EVAL GEN)) NIL))
-                        (SETQ GENV (ADD1 (EVAL GEN>
+                (COND [(CAR (ERRORSET '(NUMBERP (EVAL GEN)) NIL))
+                        (SETQ GENV (ADD1 (EVAL GEN]
                       (T (SETQ GENV 0)))
                 (SET GEN GENV)
                 (REWIND FILENR)
@@ -130,7 +130,7 @@
                             (MAKEF/OUT RPAQQ FNS FNSV)))
                 (MAKEF/OUT RPAQQ COMS COMSV)
                 (MAKEF/OUT RPAQ GEN GENV)
-                <COND (VARSV (MAKEF/OUT PRINT (LIST 'QUOTE VARS))
+                [COND (VARSV (MAKEF/OUT PRINT (LIST 'QUOTE VARS))
                              (MAKEF/OUT RPAQQ VARS VARSV)
                              (MAPC VARSV
                                    '(LAMBDA
@@ -165,7 +165,7 @@
                                                   (OUTUNIT UNIT)
                                                   (PRINTL "BAD PRETTYCOM:  " X
                                                     )
-                                                  (OUTUNIT FILENR>
+                                                  (OUTUNIT FILENR]
                 (PRINT 'STOP)
                 (REWIND FILENR)
                 (OUTUNIT UNIT)
@@ -186,7 +186,7 @@
   
 (PRETTYPRINT
   (LAMBDA (L OPT POS)
-          <SETQ POS (IOTAB 7 (PLUS 2 (IOTAB 7>
+          [SETQ POS (IOTAB 7 (PLUS 2 (IOTAB 7]
           (MAKEF/MAPC* L
             '(LAMBDA (X)
                      (PRIN1 "(")
@@ -225,7 +225,7 @@
 (RPAQQ MAKEFCOMS (MAKE FILE PACKAGE MODIFIED BY BLAKE MCBRIDE))
 (RPAQ MAKEFGENNR 6)
 (PRINT 'MAKEFVARS)
-<RPAQQ MAKEFVARS (CURFILE CURLIBS SYSPROPS (P (RPAQ CURFNS>
+[RPAQQ MAKEFVARS (CURFILE CURLIBS SYSPROPS (P (RPAQ CURFNS]
 (RPAQQ CURFILE CUR)
 (RPAQQ CURLIBS (DEBUG2 EDIT CUR MAKEF DEBUG1 FUNC1 IO1 BASIC2))
 (RPAQQ SYSPROPS

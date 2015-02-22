@@ -12,7 +12,7 @@
              (MAPC (BREAK-SKIP1 (ALIST T)) 'BT-PRINT 'BREAK-SKIP))))
    
  (BREAK-EVAL
-   <LAMBDA (BREAK-FORM)
+   [LAMBDA (BREAK-FORM)
            (PROG ((*BRKFLG NIL) BREAK-EVAL)
                  (RETURN (COND (*BRKEVAL !VALUE)
                                ((OR (NLISTP BREAK-FORM)
@@ -20,10 +20,10 @@
                                  (EVAL BREAK-FORM))
                                ((APPLY
                                   (CADR BREAK-FORM)
-                                  (CDDR BREAK-FORM>)
+                                  (CDDR BREAK-FORM])
    
  (BREAK-SKIP
-   <LAMBDA (X)
+   [LAMBDA (X)
            (PROG NIL
             LOOP (RETURN (AND X
                               (SELECTQ
@@ -31,25 +31,25 @@
                                 (BREAK-EVAL (BREAK-SKIP1 X))
                                 (*FORM (CDR X))
                                 (COND (BTV (CDR X))
-                                      (T (SETQ X (CDR X)) (GO LOOP>)
+                                      (T (SETQ X (CDR X)) (GO LOOP])
    
  (BREAK-SKIP1
-   <LAMBDA (X)
+   [LAMBDA (X)
            (PROG NIL
             LOOP (COND ((NULL (SETQ X (CDR X))) (RETURN NIL))
                        ((EQ (CAAR X) '*FORM)
                          (SELECTQ
                            (CADAR X)
-                           <(BREAK11 SYSERROR)
-                             (RETURN (CONS '**BREAK** (CDR X>
+                           [(BREAK11 SYSERROR)
+                             (RETURN (CONS '**BREAK** (CDR X]
                            (GO LOOP)))
-                       (T (GO LOOP>)
+                       (T (GO LOOP])
    
  (BREAK1
    (NLAMBDA L (APPLYSTK 'BREAK11 L (BINDENV L))))
    
  (BREAK11
-   <LAMBDA (BRKEXP BRKWHEN BRKFN BRKCOMS SYSERROR)
+   [LAMBDA (BRKEXP BRKWHEN BRKFN BRKCOMS SYSERROR)
            ((FSUBR . COND)
              (*BRKFLG ((SUBR . EVAL) BRKEXP))
              (((FSUBR . PROG)
@@ -66,22 +66,22 @@
                          BREAK11LOOP
                               (PRINT (LIST BRKFN 'BROKEN))
                          L    (SETQ COM (COM-READ BRKCOMS :))
-                              <SELECTQ COM
-                                <?= (OR SYSERROR
+                              [SELECTQ COM
+                                [?= (OR SYSERROR
                                         (PRVARS1
                                           (*ARGLIST BRKFN)
-                                          (PRVARS (*ARGLIST BRKFN) AL>
+                                          (PRVARS (*ARGLIST BRKFN) AL]
                                 (! (GO* BREAKOUT))
                                 (OK (RETURN (BREAK-EVAL BRKEXP)))
-                                <GO (RETURN
+                                [GO (RETURN
                                       (PRINT
                                         (BREAK-EVAL BRKEXP)
                                         (PRIN2 BRKFN)
-                                        (PRIN1 " = ">
-                                <RETURN
+                                        (PRIN1 " = "]
+                                [RETURN
                                   (SETQ *BRKEVAL NIL)
                                   (RETURN
-                                    (BREAK-EVAL (COM-READ BRKCOMS :>
+                                    (BREAK-EVAL (COM-READ BRKCOMS :]
                                 (EVAL (SETQ *BRKEVAL NIL)
                                       (SETQ !VALUE (BREAK-EVAL BRKEXP))
                                       (PRINTL-SP BRKFN 'EVALUATED)
@@ -98,26 +98,26 @@
                                 (BT (BREAK-BT AL))
                                 (BTV (BREAK-BT AL T))
                                 ((LAMBDA *BRKEVAL
-                                   (PRINT (BREAK-EVAL COM>
+                                   (PRINT (BREAK-EVAL COM]
                               (GO L))
                         (IOTAB 1 *BR1)
                         (IOTAB 5 *BR2))
                 BREAKOUT
                 (GO* BREAK11LOOP)
-                (RESET>)
+                (RESET])
    
  (BT-PRINT
-   <LAMBDA (X)
+   [LAMBDA (X)
            (COND ((NLISTP X) (PRINT X))
                  ((SELECTQ
                     (CAR X)
-                    <*FORM (PRIN2L-SP
+                    [*FORM (PRIN2L-SP
                              (CAR X)
                              (SELECTQ
                                (CADR X)
                                (PROG '*PROG)
-                               (CDR X>
-                    (PRIN2L-SP (CAR X) '= (CDR X>)
+                               (CDR X]
+                    (PRIN2L-SP (CAR X) '= (CDR X])
    
  (ERRORB
    (LAMBDA NIL (GO* ERRORSET) (RESET)))
@@ -136,24 +136,24 @@
    (LAMBDA (X) (LIST 'QUOTE X)))
    
  (PRVARS
-   <LAMBDA (L AL)
+   [LAMBDA (L AL)
            (COND ((NULL L) NIL)
                  ((ATOM L) (EVSTK L AL))
-                 (T (CONS (EVSTK (CAR L) AL) (PRVARS (CDR L) AL>)
+                 (T (CONS (EVSTK (CAR L) AL) (PRVARS (CDR L) AL])
    
  (PRVARS1
-   <LAMBDA (VARS VALS)
+   [LAMBDA (VARS VALS)
            (COND ((NULL VARS) NIL)
                  ((NLISTP VARS) (PRIN2L-SP VARS '= VALS))
                  (T (PRIN2L-SP (CAR VARS) '= (CAR VALS))
-                    (PRVARS1 (CDR VARS) (CDR VALS>)
+                    (PRVARS1 (CDR VARS) (CDR VALS])
    
  (SYSERROR
    (LAMBDA (ERRTYPE FN ARG FORM *BRKFLG)
-           <COND (ERRFLG (OUTUNIT
+           [COND (ERRFLG (OUTUNIT
                            (OUTUNIT T)
                            (ERRORMESS ERRTYPE)
-                           (PRIN2L-SP FN '- ARG>
+                           (PRIN2L-SP FN '- ARG]
            (GO* ERRORSET)
            (BREAK11 FORM T FN NIL T)))
    
@@ -165,10 +165,10 @@
  (RPAQQ DEBUG1COMS DEBUG1-PACKAGE)
  (RPAQ DEBUG1GENNR 4)
  (PRINT 'DEBUG1VARS)
- <RPAQQ DEBUG1VARS
+ [RPAQQ DEBUG1VARS
         ((P (RPAQ *PRINTLEVEL 3)
             (RPAQ *BRKFLG NIL)
-            (RPAQ ERRFLG T>
+            (RPAQ ERRFLG T]
  (RPAQ *PRINTLEVEL 3)
  (RPAQ *BRKFLG NIL)
  (RPAQ ERRFLG T)

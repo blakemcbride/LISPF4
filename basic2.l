@@ -6,13 +6,13 @@
    (LAMBDA (X) (TIMES X (SIGN X))))
    
  (ADDPROP
-   <LAMBDA (A IND S FLAG)
+   [LAMBDA (A IND S FLAG)
            (PUTPROP A IND
                     (PROG ((TEMP (GETPROP A IND)))
                           (RETURN
                             (COND ((NLISTP TEMP) (LIST S))
                                   (FLAG (CONS S TEMP))
-                                  (T (NCONC1 TEMP S>)
+                                  (T (NCONC1 TEMP S])
    
  (APPLY*
    (LAMBDA (FN . L) (APPLYSTK FN L (BINDENV FN))))
@@ -23,13 +23,13 @@
            (RPLACA Y X)))
    
  (BOUNDP
-   <NLAMBDA (A)
+   [NLAMBDA (A)
             (OR (NULL (NULL (STRINGP A)))
                 (NULL (NULL (NUMBERP A)))
-                (AND (LITATOM A) (NEQ (CAR A) 'NOBIND>)
+                (AND (LITATOM A) (NEQ (CAR A) 'NOBIND])
    
  (CHANGEPROP
-   <LAMBDA (A P PR)
+   [LAMBDA (A P PR)
            (AND (LITATOM A)
                 (PROG ((L (GETPROPLIST A)))
                       (AND (NLISTP L) (RETURN))
@@ -38,35 +38,35 @@
                            (RETURN A))
                       (AND (NLISTP (SETQ L (CDR L))) (RETURN))
                       (AND (NLISTP (SETQ L (CDR L))) (RETURN))
-                      (GO LOOP>)
+                      (GO LOOP])
    
  (COPY
    (LAMBDA (X) (SUBPAIR NIL NIL X)))
    
  (DEFLIST
-   <LAMBDA (L PROP)
+   [LAMBDA (L PROP)
            (MAPC L
-                 '(LAMBDA (X) (PUTPROP (CAR X) PROP (CADR X>)
+                 '(LAMBDA (X) (PUTPROP (CAR X) PROP (CADR X])
    
  (DREMOVE
-   <LAMBDA (X L)
+   [LAMBDA (X L)
            (COND ((ATOM L) NIL)
-                 <(EQ X (CAR L))
+                 [(EQ X (CAR L))
                    (COND ((CDR L)
                            (RPLACA L (CADR L))
                            (RPLACD L (CDDR L))
-                           (DREMOVE X L>
+                           (DREMOVE X L]
                  (T (PROG ((Z L))
-                     LP   <COND ((ATOM (CDR L)) (RETURN Z))
+                     LP   [COND ((ATOM (CDR L)) (RETURN Z))
                                 ((EQ X (CADR L))
                                   (RPLACD L (CDDR L)))
-                                (T (SETQ L (CDR L>
-                          (GO LP>)
+                                (T (SETQ L (CDR L]
+                          (GO LP])
    
  (DREVERSE
    (LAMBDA (L)
            (PROG ((L1 L) Y Z)
-            LP   <COND ((ATOM (SETQ Y L))
+            LP   [COND ((ATOM (SETQ Y L))
                          (COND ((OR (NULL Z) (NULL (CDR Z)))
                                  (RETURN Z))
                                ((NULL (CDDR Z))
@@ -84,7 +84,7 @@
                                   (RPLACA Z Y)
                                   (RPLACD L1 (CDR Z))
                                   (RPLACD Z NIL)
-                                  (RETURN L1>
+                                  (RETURN L1]
                  (SETQ L (CDR L))
                  (SETQ Z (RPLACD Y Z))
                  (GO LP))))
@@ -93,18 +93,18 @@
    (LAMBDA (DATA COMPAREFN)
            (PROG ((SORTTMP1 DATA) (SORTTMP2 (CONS)))
             L2   (COND ((LISTP SORTTMP1)
-                         <SETQ SORTTMP1
+                         [SETQ SORTTMP1
                                (CDR (RPLACA SORTTMP1
-                                      (LIST (CAR SORTTMP1>
+                                      (LIST (CAR SORTTMP1]
                          (GO L2))
                        ((NLISTP DATA) (RETURN DATA))
                        ((EQ COMPAREFN T) (SETQ COMPAREFN 'ALPHORDER))
                        ((NULL COMPAREFN) (SETQ COMPAREFN 'ALPHORDER)))
-            L1   (COND <(NLISTP (CDR DATA))
+            L1   (COND [(NLISTP (CDR DATA))
                          (RETURN
                            (RPLACA
                              (RPLACD DATA (CDAR DATA))
-                             (CAAR DATA>
+                             (CAAR DATA]
                        (T (SETQ SORTTMP1 DATA)))
             LOOP (AND (LISTP SORTTMP1)
                       (LISTP (CDR SORTTMP1))
@@ -112,34 +112,34 @@
                                (CAR SORTTMP1)
                                (CADR SORTTMP1)
                                COMPAREFN)
-                             <RPLACD SORTTMP1
+                             [RPLACD SORTTMP1
                                (SETQ SORTTMP1
                                      (CDDR (RPLACA SORTTMP1
-                                             (CDR SORTTMP2>
+                                             (CDR SORTTMP2]
                              (GO LOOP)))
                  (GO L1))))
    
  (DSUBST
    (LAMBDA (NEW OLD SOURCE)
-           <COND ((LISTP SOURCE)
-                   <COND ((EQUAL OLD (CAR SOURCE))
+           [COND ((LISTP SOURCE)
+                   [COND ((EQUAL OLD (CAR SOURCE))
                            (RPLACA SOURCE (COPY NEW)))
-                         (T (DSUBST NEW OLD (CAR SOURCE>
+                         (T (DSUBST NEW OLD (CAR SOURCE]
                    (COND ((EQUAL OLD (CDR SOURCE))
                            (RPLACD SOURCE (COPY NEW)))
-                         (T (DSUBST NEW OLD (CDR SOURCE>
+                         (T (DSUBST NEW OLD (CDR SOURCE]
            SOURCE))
    
  (EVERY
-   <LAMBDA (X FN1 FN2)
+   [LAMBDA (X FN1 FN2)
            (PROG NIL
             A    (COND ((NULL X) (RETURN T))
                        ((APPLY FN1 (LIST (CAR X)))
-                         <SETQ X
+                         [SETQ X
                                (COND ((NULL FN2) (CDR X))
-                                     (T (APPLY FN2 (LIST X>
+                                     (T (APPLY FN2 (LIST X]
                          (GO A))
-                       (T (RETURN>)
+                       (T (RETURN])
    
  (FIX
    (LAMBDA (N) (CAR (IQUOREM N 1))))
@@ -163,15 +163,15 @@
    (LAMBDA (ATM) (AND (LITATOM ATM) (CAR ATM))))
    
  (LCONC
-   <LAMBDA (P A)
+   [LAMBDA (P A)
            (PROG NIL
                  (OR A (RETURN P))
-                 <AND (NLISTP P) (RETURN (CONS A (LAST A>
-                 <AND (NLISTP (CDR P))
+                 [AND (NLISTP P) (RETURN (CONS A (LAST A]
+                 [AND (NLISTP (CDR P))
                       (RPLACA P A)
-                      (RETURN (RPLACD P (LAST A>
+                      (RETURN (RPLACD P (LAST A]
                  (RPLACD (CDR P) A)
-                 (RETURN (RPLACD P (LAST A>)
+                 (RETURN (RPLACD P (LAST A])
    
  (LEQ
    (LAMBDA (A B) (NULL (GREATERP A B))))
@@ -185,7 +185,7 @@
                  (GO LOOP))))
    
  (MERGE
-   <LAMBDA (A B COMPAREFN)
+   [LAMBDA (A B COMPAREFN)
            (COND ((NLISTP B) A)
                  ((NLISTP A) B)
                  (T (ATTACH NIL B)
@@ -197,21 +197,21 @@
                         ((T NIL) 'ALPHORDER)
                         COMPAREFN))
                     (RPLACD (RPLACA A (CADR A)) (CDDR A))
-                    (RPLACD (RPLACA B (CAR A)) (CDR A>)
+                    (RPLACD (RPLACA B (CAR A)) (CDR A])
    
  (MERGE---
    (LAMBDA (MERGEROOT A B COMPAREFN)
            (PROG NIL
-            LOOP <COND ((NLISTP A) (RETURN (RPLACD MERGEROOT B)))
+            LOOP [COND ((NLISTP A) (RETURN (RPLACD MERGEROOT B)))
                        ((NLISTP B) (RETURN (RPLACD MERGEROOT A)))
-                       <(APPLY* COMPAREFN (CAR A) (CAR B))
+                       [(APPLY* COMPAREFN (CAR A) (CAR B))
                          (SETQ A
                                (PROG1 (CDR A)
-                                      (RPLACD MERGEROOT (RPLACD A NIL>
+                                      (RPLACD MERGEROOT (RPLACD A NIL]
                        (T (SETQ B
                                 (PROG1
                                   (CDR B)
-                                  (RPLACD MERGEROOT (RPLACD B NIL>
+                                  (RPLACD MERGEROOT (RPLACD B NIL]
                  (SETQ MERGEROOT (CDR MERGEROOT))
                  (GO LOOP))))
    
@@ -264,28 +264,28 @@
                  'CDDR)))
    
  (REMAINDER
-   <LAMBDA (A B) (DIFFERENCE A (TIMES B (QUOTIENT A B>)
+   [LAMBDA (A B) (DIFFERENCE A (TIMES B (QUOTIENT A B])
    
  (REMOVE
    (LAMBDA (X L L1)
-           <MAPC L
+           [MAPC L
                  '(LAMBDA (A)
-                          (OR (EQUAL A X) (SETQ L1 (CONS A L1>
+                          (OR (EQUAL A X) (SETQ L1 (CONS A L1]
            (REVERSE L1)))
    
  (REMPROP
-   <LAMBDA (A IND)
+   [LAMBDA (A IND)
            (PROG ((TEMP A))
             LOP  (COND ((EQ (CADR TEMP) IND)
                          (RPLACD TEMP (CDDDR TEMP))
                          (RETURN IND))
-                       (TEMP (SETQ TEMP (CDDR TEMP)) (GO LOP>)
+                       (TEMP (SETQ TEMP (CDDR TEMP)) (GO LOP])
    
  (REMPROPLIST
-   <LAMBDA (A L) (MAPC L '(NLAMBDA (B) (REMPROP A B>)
+   [LAMBDA (A L) (MAPC L '(NLAMBDA (B) (REMPROP A B])
    
  (RPAQ
-   <NLAMBDA (A B) (RPLACA A (EVSTK B (BINDENV A>)
+   [NLAMBDA (A B) (RPLACA A (EVSTK B (BINDENV A])
    
  (RPAQQ
    (NLAMBDA (A B) (RPLACA A B)))
@@ -297,9 +297,9 @@
               (BINDENV N))))
    
  (RSTRING
-   <LAMBDA (N)
+   [LAMBDA (N)
            (SETQ N (OR N 75))
-           (MAPC '(%( %) %< %> %" %' %%) '(LAMBDA (X) (CHTAB X 10)))
+           (MAPC '(%( %) %[ %] %" %' %%) '(LAMBDA (X) (CHTAB X 10)))
            (READ)
            (READPOS 1)
            (PROG ((ST ""))
@@ -311,15 +311,15 @@
                  (AND (EQ '%  (CAR ST))
                       (SETQ ST (CDR ST))
                       (GO LOOP2))
-                 (MAP '(%( 2 %) 3 %< 4 %> 5 %" 6 %' 7 %% 23)
+                 (MAP '(%( 2 %) 3 %[ 4 %] 5 %" 6 %' 7 %% 23)
                       '(LAMBDA (X) (CHTAB (CAR X) (CADR X)))
                       'CDDR)
-                 (RETURN (PACK (REVERSE ST>)
+                 (RETURN (PACK (REVERSE ST])
    
  (SAVEDEF
-   <LAMBDA (A P)
+   [LAMBDA (A P)
            (PROG ((PR (OR P 'EXPR)) (DEF (GETD A)))
-                 (AND DEF (PUTPROP A PR DEF) (RETURN PR>)
+                 (AND DEF (PUTPROP A PR DEF) (RETURN PR])
    
  (SETPROPLIST
    (LAMBDA (A L) (AND (LITATOM A) (RPLACD A L) L)))
@@ -336,20 +336,20 @@
            (COND ((ZEROP X) 0) ((LESSP 0 X) 1) (T -1))))
    
  (SOME
-   <LAMBDA (X FN1 FN2)
+   [LAMBDA (X FN1 FN2)
            (PROG NIL
             A    (COND ((NULL X) (RETURN))
                        ((APPLY FN1 (LIST (CAR X))) (RETURN X))
-                       (T <SETQ X
+                       (T [SETQ X
                                 (COND ((NULL FN2) (CDR X))
-                                      (T (APPLY FN2 (LIST X>
-                          (GO A>)
+                                      (T (APPLY FN2 (LIST X]
+                          (GO A])
    
  (STREQUAL
    (LAMBDA (X Y) (AND (STRINGP X) (STRINGP Y) (EQUAL X Y))))
    
  (SUBSET
-   <LAMBDA (L F1 F2)
+   [LAMBDA (L F1 F2)
            (AND (NULL F2) (SETQ F2 'CDR))
            (PROG ((A (REVERSE L)) (ENV (BINDENV L)) TMP R)
             LOOP (COND (A (AND (SETQ TMP
@@ -357,7 +357,7 @@
                                (SETQ R (CONS TMP R)))
                           (SETQ A (APPLYSTK F2 (LIST A) ENV))
                           (GO LOOP))
-                       ((RETURN R>)
+                       ((RETURN R])
   
  (SUBST
    (LAMBDA (X Y S)
@@ -368,20 +368,20 @@
            (SUBPAIR (MAPCAR A 'CAR)(MAPCAR A 'CDR) S)))
   
  (TCONC
-   <LAMBDA (P A)
+   [LAMBDA (P A)
            (PROG ((B (LIST A)))
-                 <AND (NLISTP P) (RETURN (CONS B (LAST B>
-                 <AND (NLISTP (CDR P))
+                 [AND (NLISTP P) (RETURN (CONS B (LAST B]
+                 [AND (NLISTP (CDR P))
                       (RPLACA P B)
-                      (RETURN (RPLACD P (LAST B>
+                      (RETURN (RPLACD P (LAST B]
                  (RPLACD (CDR P) B)
-                 (RETURN (RPLACD P B>)
+                 (RETURN (RPLACD P B])
    
  (UNSAVEDEF
-   <LAMBDA (A P)
+   [LAMBDA (A P)
            (PROG ((PR (OR P 'EXPR)) DEF)
                  (SETQ DEF (GETPROP A PR))
-                 (AND DEF (PUTPROP A 'FNCELL DEF) (RETURN PR>)
+                 (AND DEF (PUTPROP A 'FNCELL DEF) (RETURN PR])
    
  )
  (PRINT 'BASIC2FNS)

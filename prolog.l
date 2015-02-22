@@ -3,15 +3,15 @@
 (PRINT '(VERSION 2))
 (DEFINEQ
 (PROVE
-  <LAMBDA (GS)
+  [LAMBDA (GS)
           (RESET* NIL NIL)
-          (SEEK (LIST (ALLOCATE)) (LIST (CAR GS>)
+          (SEEK (LIST (ALLOCATE)) (LIST (CAR GS])
   
 (ULT
-  <LAMBDA (M X)
+  [LAMBDA (M X)
           (COND ((OR (ATOM X) (NULL (EQ (CAR X) '?))) X)
                 ((LESSP (CADR X) 7)
-                  <PROG ((M X)) (FINAL (IMM M (CADR X>
+                  [PROG ((M X)) (FINAL (IMM M (CADR X]
                   X)
                 ((DO UNTIL
                      (LESSP X 7)
@@ -24,23 +24,23 @@
                      (SETQ X (MINUS X 6))
                      (SETQ M
                            (OR (IMM M 7)
-                               (IMM (SETIMM M 7 (ALLOCATE)) 7>)
+                               (IMM (SETIMM M 7 (ALLOCATE)) 7])
   
 (POP
-  <LAMBDA (S) (PROG1 (CAR S) (SETQ S (CDR S>)
+  [LAMBDA (S) (PROG1 (CAR S) (SETQ S (CDR S])
   
 (PUSH
   (LAMBDA (V S) (SETQ S (CONS V S))))
   
 (SEEK
-  <LAMBDA (E C)
+  [LAMBDA (E C)
           (DO WHILE (AND C (NULL (CAR C))) DO (POP E) (POP C))
           (COND ((NULL C) (FUNCALL *TOPFUN*))
                 ((ATOM (CAR C)) (FUNCALL (CAR C) E (CDR C)))
-                ((DO>)
+                ((DO])
   
 (UNIFY
-  <LAMBDA (M X N Y)
+  [LAMBDA (M X N Y)
           (DO WHILE T DO
               (COND ((AND (EQ (ULT M X) (ULT N Y)) (EQ M N))
                       (RETURN T))
@@ -49,7 +49,7 @@
                     ((OR (ATOM X) (ATOM Y))
                       (RETURN (EQUAL X Y)))
                     ((NULL (UNIFY M (POP X) N (POP Y)))
-                      (RETURN NIL>)
+                      (RETURN NIL])
   
 (CATCH-CUT
   (LAMBDA (V E)
@@ -60,9 +60,9 @@
   (LAMBDA (X) (CDR (MEMQ NIL X))))
   
 (BIND
-  <LAMBDA (X Y N)
+  [LAMBDA (X Y N)
           (COND (N (PUSH X *E*) (RPLACD X (CONS N Y)))
-                (T (PUSH X *E*) (RPLACD X Y) (RPLACA X *FORWARD>)
+                (T (PUSH X *E*) (RPLACD X Y) (RPLACA X *FORWARD])
   
 (UNBIND
   (LAMBDA (OE)
@@ -83,23 +83,23 @@
   (LAMBDA (ON) (DO UNTIL (EQ *N* ON) DO (TRANSFER *N* *FH*))))
   
 (ALLOCATE
-  <LAMBDA NIL
+  [LAMBDA NIL
           (COND (*FH* (TRANSFER *FH* *N*) (SETIMM *N* 7 NIL))
-                ((SETQ *N* (SETIMM (MAKRECORD 8) 0 *N*>)
+                ((SETQ *N* (SETIMM (MAKRECORD 8) 0 *N*])
   
 (TRANSFER
-  <LAMBDA (X Y)
-          (SETQ X (PROG1 (IMM X 0) (SETQ Y (SETIMM X 0 Y>)
+  [LAMBDA (X Y)
+          (SETQ X (PROG1 (IMM X 0) (SETQ Y (SETIMM X 0 Y])
   
 (MAKRECORD
-  <LAMBDA (N)
+  [LAMBDA (N)
           (DO FOR END
               (MINUS N 2)
               RET R VAR I LVARS
               ((R (MAKHUNK N)) C)
               DO
               (SETQ C (CONS NIL NIL))
-              (SETIMM R I (RPLACD C C>)
+              (SETIMM R I (RPLACD C C])
   
 (SETIMM
   (LAMBDA (M X V) (RPLACX X M V)))
@@ -131,6 +131,6 @@
 (RPAQQ *N* NIL)
 (RPAQQ *INF* 0)
 (RPAQQ *FORWARD* NIL)
-<RPAQQ *TOPFUN*
-       (LAMBDA NIL (PRIN1 "MORE? ") (AND (NULL (READ)) '(TOP>
+[RPAQQ *TOPFUN*
+       (LAMBDA NIL (PRIN1 "MORE? ") (AND (NULL (READ)) '(TOP]
 STOP

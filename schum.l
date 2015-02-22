@@ -64,14 +64,14 @@
    (LAMBDA (X) (PRINT X) NIL))
    
  (EVLIS0
-   <LAMBDA NIL
+   [LAMBDA NIL
            (COND (**ARGS**
                    (SPUSH 'EVLIS1)
                    (SETQ **EXP** (CAR **ARGS**))
                    (SETQ **PC** 'SEVAL))
                  (T (SETQ **ARGVALS** (REVERSE **ARGVALS**))
                     (SETQ **ARGS** (POP **ARGVALS**))
-                    (SETQ **PC** 'SCHAPPLY>)
+                    (SETQ **PC** 'SCHAPPLY])
    
  (EVLIS1
    (LAMBDA NIL
@@ -80,12 +80,12 @@
            (SETQ **PC** 'EVLIS0)))
    
  (EVSEQ
-   <LAMBDA NIL
+   [LAMBDA NIL
            (COND (**ARGS**
                    (COND ((CDR **ARGS**) (SPUSH 'EVSEQ1)))
                    (SETQ **EXP** (CAR **ARGS**))
                    (SETQ **PC** 'SEVAL))
-                 ((SPOP>)
+                 ((SPOP])
    
  (EVSEQ1
    (LAMBDA NIL (SETQ **ARGS** (CDR **ARGS**)) (SETQ **PC** 'EVSEQ)))
@@ -104,30 +104,30 @@
    (LAMBDA (X) (CADR X)))
    
  (GETL
-   <LAMBDA (F)
+   [LAMBDA (F)
            (OR (GETPROP F 'SCHUMRES)
                (AND (LISTP (SETQ F (GETD F)))
-                    (SELECTQ (CAR F) (NLAMBDA F) (FSUBR F) NIL>)
+                    (SELECTQ (CAR F) (NLAMBDA F) (FSUBR F) NIL])
    
  (IF0
    (LAMBDA NIL (SETQ **ARGS** (CDR **EXP**)) (SETQ **PC** 'IF1)))
    
  (IF1
-   <LAMBDA NIL
+   [LAMBDA NIL
            (COND (**ARGS**
                    (COND ((OR (CDR **ARGS**) (CDAR **ARGS**))
                            (SPUSH 'IF2)))
                    (SETQ **EXP** (CAAR **ARGS**))
                    (SETQ **PC** 'SEVAL))
-                 (T (SETQ **VAL** NIL) (SPOP>)
+                 (T (SETQ **VAL** NIL) (SPOP])
    
  (IF2
-   <LAMBDA NIL
+   [LAMBDA NIL
            (COND (**VAL**
                    (SETQ **ARGS** (CDAR **ARGS**))
                    (SETQ **PC** 'EVSEQ))
                  (T (SETQ **ARGS** (CDR **ARGS**))
-                    (SETQ **PC** 'IF1>)
+                    (SETQ **PC** 'IF1])
    
  (IS-CLOSURE
    (LAMBDA (X) (EQ 'CLOSURE (CAR X))))
@@ -147,35 +147,35 @@
    (LAMBDA (VARS BODY) (LIST '\ VARS BODY)))
    
  (MAPCAR2
-   <LAMBDA (F L1 L2)
+   [LAMBDA (F L1 L2)
            (COND ((NULL L1) NIL)
                  (T (CONS (APPLY F (LIST (CAR L1) (CAR L2)))
-                          (MAPCAR2 F (CDR L1) (CDR L2>)
+                          (MAPCAR2 F (CDR L1) (CDR L2])
    
  (MLOOP
-   <LAMBDA NIL
+   [LAMBDA NIL
            (PROG NIL
             LOOP (COND (**PC** (APPLY **PC** NIL) (GO LOOP))
-                       ((RETURN **VAL**>)
+                       ((RETURN **VAL**])
    
  (POP
-   <NLAMBDA ($POP$)
+   [NLAMBDA ($POP$)
             (PROG (($POP (EVAL $POP$)))
                   (SET $POP$ (CDR $POP))
-                  (RETURN (CAR $POP>)
+                  (RETURN (CAR $POP])
    
  (PUSH
-   <NLAMBDA ($PUSH$ $PUSH)
-            (CAR (SET $PUSH (CONS (EVAL $PUSH$) (EVAL $PUSH>)
+   [NLAMBDA ($PUSH$ $PUSH)
+            (CAR (SET $PUSH (CONS (EVAL $PUSH$) (EVAL $PUSH])
    
  (REC-EVLIS
-   <LAMBDA NIL
+   [LAMBDA NIL
            (COND (**ARGS**
                    (SPUSH 'REC-EVLIS1)
                    (SETQ **EXP** (CAR **ARGS**))
                    (SETQ **PC** 'SEVAL))
                  (T (SETQ **ARGS** (CDDR **EXP**))
-                    (SETQ **PC** 'EVSEQ>)
+                    (SETQ **PC** 'EVSEQ])
    
  (REC-EVLIS1
    (LAMBDA NIL
@@ -184,7 +184,7 @@
            (SETQ **PC** 'REC-EVLIS)))
    
  (SCHAPPLY
-   <LAMBDA NIL
+   [LAMBDA NIL
            (COND ((ATOM **ARGS**)
                    (SETQ **VAL** (APPLY **ARGS** **ARGVALS**))
                    (SPOP))
@@ -201,25 +201,25 @@
                    (SETQ **VAL** (CAR **ARGVALS**))
                    (SETQ **STACK** (FRAME:LABEL-FUNCTION **ARGS**))
                    (SPOP))
-                 ((ERROR "BAD FUNCTION">)
+                 ((ERROR "BAD FUNCTION"])
    
  (SCHUM
-   <LAMBDA NIL
+   [LAMBDA NIL
            (PROG (R)
             LOOP (PRINT 'SCHUM)
-                 <SETQ R (PRINT (SCHUMVAL (READ>
-                 (AND (NEQ R 'LISP) (GO LOOP>)
+                 [SETQ R (PRINT (SCHUMVAL (READ]
+                 (AND (NEQ R 'LISP) (GO LOOP])
    
  (SCHUMVAL
-   <LAMBDA (**EXP**)
+   [LAMBDA (**EXP**)
            (PROG ((**ENV** **ENV**)
                    (**PC** 'SEVAL)
                    **ARGS** **ARGVALS**
                    (**STACK** (FRAME NIL NIL NIL NIL NIL NIL)))
-                 (RETURN (MLOOP>)
+                 (RETURN (MLOOP])
    
  (SEVAL
-   <LAMBDA NIL
+   [LAMBDA NIL
            (PROG (TEMP)
                  (COND ((ATOM **EXP**)
                          (COND ((OR (NUMBERP **EXP**)
@@ -232,7 +232,7 @@
                                   NIL))
                                ((ERROR "UNBOUND VARIABLE")))
                          (SPOP))
-                       <(AND (ATOM (FUN:APPL **EXP**))
+                       [(AND (ATOM (FUN:APPL **EXP**))
                              (GETL (FUN:APPL **EXP**)))
                          (COND ((SETQ TEMP
                                       (GETPROP
@@ -241,10 +241,10 @@
                                  (SETQ **PC** TEMP))
                                ((GETD (FUN:APPL **EXP**))
                                  (SETQ **VAL** (EVAL **EXP**))
-                                 (SPOP>
+                                 (SPOP]
                        (T (SETQ **ARGVALS** NIL)
                           (SETQ **ARGS** **EXP**)
-                          (SETQ **PC** 'EVLIS0>)
+                          (SETQ **PC** 'EVLIS0])
    
  (SLABEL
    (LAMBDA NIL
@@ -257,14 +257,14 @@
            (SETQ **PC** 'EVSEQ)))
    
  (SPOP
-   <LAMBDA NIL
+   [LAMBDA NIL
            (COND (**STACK**
                    (SETQ **EXP** (POP **STACK**))
                    (SETQ **ENV** (POP **STACK**))
                    (SETQ **PC** (POP **STACK**))
                    (SETQ **ARGS** (POP **STACK**))
                    (SETQ **ARGVALS** (POP **STACK**)))
-                 (T (ERROR "BLEW STACK">)
+                 (T (ERROR "BLEW STACK"])
    
  (SPUSH
    (LAMBDA (TAG)
@@ -287,10 +287,10 @@
    (LAMBDA (X) (CADR X)))
    
  (VARSBIND
-   <LAMBDA (VARS VALS ENV)
+   [LAMBDA (VARS VALS ENV)
            (COND ((EQUAL (LENGTH VARS) (LENGTH VALS))
                    (NCONC (MAPCAR2 'BDG VARS VALS) ENV))
-                 (T (ERROR "WRONG NUMBER OF ARGUMENTS">)
+                 (T (ERROR "WRONG NUMBER OF ARGUMENTS"])
    
  (\
    (NLAMBDA L (CLOSURE (LAMBDA-EXP (CAR L) (CDR L)) **ENV**)))

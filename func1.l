@@ -10,29 +10,29 @@
   
 (DM
   (NLAMBDA L
-           <PUTD (CAR L)
+           [PUTD (CAR L)
                  (LIST 'NLAMBDA '$MACRO$
                        (LIST 'EVAL
                              (LIST (CONS 'LAMBDA
                                          (CONS
                                            (LIST (CADR L))
                                            (CDDR L)))
-                                   '$MACRO$>
+                                   '$MACRO$]
            (CAR L)))
   
 (GETD
   (LAMBDA (FN) (AND (NULL LDFLG) ((SUBR . GETD) FN))))
   
 (SAVEDEF
-  <LAMBDA (A P)
+  [LAMBDA (A P)
           (PROG ((PR (OR P 'EXPR)) (DEF (GETD A)))
-                (AND DEF (PUTPROP A PR DEF) (RETURN PR>)
+                (AND DEF (PUTPROP A PR DEF) (RETURN PR])
   
 (UNSAVEDEF
-  <LAMBDA (A P)
+  [LAMBDA (A P)
           (PROG ((PR (OR P 'EXPR)) DEF)
                 (SETQ DEF (GETPROP A PR))
-                (AND DEF (PUTPROP A 'FNCELL DEF) (RETURN PR>)
+                (AND DEF (PUTPROP A 'FNCELL DEF) (RETURN PR])
   
 (VIRGINFN
   (LAMBDA (X) (OR (GETPROP X 'VIRGINFN) ((SUBR . GETD) X))))
@@ -43,7 +43,7 @@
 (RPAQQ FUNC1COMS FUNC1-PACKAGE)
 (RPAQ FUNC1GENNR 2)
 (PRINT 'FUNC1VARS)
-<RPAQQ FUNC1VARS
+[RPAQQ FUNC1VARS
        ((P (RPAQ CURFNS NIL)
            (RPAQ CURFILEFNS 'CURFNS)
            (PUTD 'PUTD
@@ -55,7 +55,7 @@
                           (SET CURFILEFNS
                                (ADDLIST FN (EVAL CURFILEFNS)))
                           DEF))
-           (RPAQ LDFLG>
+           (RPAQ LDFLG]
 (RPAQ CURFNS NIL)
 (RPAQ CURFILEFNS 'CURFNS)
 (PUTD 'PUTD '(LAMBDA (FN DEF) (COND ((GETD FN) (SAVEDEF FN) (PRINTL-SP FN 

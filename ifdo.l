@@ -3,21 +3,21 @@
 (PRINT '(VERSION 5))
 (DEFINEQ
 (COMP2
-  <LAMBDA (F F2 P Q)
+  [LAMBDA (F F2 P Q)
           (COND ((ATOM P) P)
-                <(MATCH (LIST F '(? (0 T NIL Q T))) (CAR P))
+                [(MATCH (LIST F '(? (0 T NIL Q T))) (CAR P))
                   (CONS (EVAL (LIST F2 (LIST 'QUOTE Q)))
-                        (COMP2 F F2 (CDR P>
-                ((CONS (COMP2 F F2 (CAR P)) (COMP2 F F2 (CDR P>)
+                        (COMP2 F F2 (CDR P]
+                ((CONS (COMP2 F F2 (CAR P)) (COMP2 F F2 (CDR P])
   
 (COMPILE
-  <LAMBDA (A)
+  [LAMBDA (A)
           (MAPC A
                 '(LAMBDA (A)
                          (PUTD A
                                (COMP2 'DO 'DO-C
                                  (COMP2 'IF 'IF-C
-                                   (COMP2 'ITP 'ITP-C (GETD A>)
+                                   (COMP2 'ITP 'ITP-C (GETD A])
   
 (COMPILEN
   (NLAMBDA A (COMPILE A)))
@@ -26,7 +26,7 @@
   (NLAMBDA DO-ARG- (EVAL (DO-C DO-ARG-))))
   
 (DO-C
-  <LAMBDA (ARG)
+  [LAMBDA (ARG)
           (PROG (EXPR (B 1)
                       (E 1)
                       (I 1)
@@ -36,12 +36,12 @@
                 (SELECTQ
                   (CAR ARG)
                   ((WHILE UNTIL)
-                    <SETQ EXPR
+                    [SETQ EXPR
                           (IF (EQ 'WHILE (CAR ARG))
                               THEN
                               (CADR ARG)
                               ELSE
-                              (LIST 'NULL (CADR ARG>
+                              (LIST 'NULL (CADR ARG]
                     (SETQ BODY
                           (PROG NIL
                                 (MAP (CDDR ARG)
@@ -83,7 +83,7 @@
                                         'CDDR)))
                        (OR EXPR (SETQ EXPR (GENSYM)))
                        (SETQ LVARS (CONS (LIST EXPR B) LVARS))
-                       <SETQ AFTER
+                       [SETQ AFTER
                              (COND ((NLISTP AFTER)
                                      (LIST 'SETQ EXPR
                                            (LIST
@@ -92,7 +92,7 @@
                                                  'DIFFERENCE)
                                                ('PLUS))
                                              EXPR I)))
-                                   <(EQ 'PROGN (CAR AFTER))
+                                   [(EQ 'PROGN (CAR AFTER))
                                      (APPEND AFTER
                                        (CONS (LIST 'SETQ EXPR
                                                (LIST
@@ -100,7 +100,7 @@
                                                    ((EQ 'DOWN DIR)
                                                      'DIFFERENCE)
                                                    ('PLUS))
-                                                 EXPR I>
+                                                 EXPR I]
                                    ((LIST 'PROGN AFTER
                                           (LIST 'SETQ EXPR
                                             (LIST
@@ -108,17 +108,17 @@
                                                 ((EQ 'DOWN DIR)
                                                   'DIFFERENCE)
                                                 ('PLUS))
-                                              EXPR I>
+                                              EXPR I]
                        (SETQ EXPR
                              (LIST (COND ((EQ 'DOWN DIR) 'GEQ)
                                          ('LEQ))
                                    EXPR E))
                        (RETURN
                          (DOWHILE EXPR RETE RETV LVARS AFTER BODY)))
-                  (RETURN (CONS 'PROGN ARG>)
+                  (RETURN (CONS 'PROGN ARG])
   
 (DOWHILE
-  <LAMBDA (EXPR RET VAR LVARS AFTER LIST)
+  [LAMBDA (EXPR RET VAR LVARS AFTER LIST)
           (SELECTQ RET
                    (LAST (LIST 'PROG
                                (CONS VAR LVARS)
@@ -159,38 +159,38 @@
                          'AFTER AFTER
                          '(GO LOOP)
                          'END
-                         (LIST 'RETURN RET>)
+                         (LIST 'RETURN RET])
   
 (IF
   (NLAMBDA IF-ARGS- (EVAL (IF-C IF-ARGS-))))
   
 (IF-C
-  <LAMBDA (ARG)
+  [LAMBDA (ARG)
           (PROG ((LEN (LENGTH ARG))
                   (IKL '(THEN ELSEIF ELSE THENRET))
                   (STATE 'INIT)
                   TOTALCOL COL)
-                (COND <(AND (EQ LEN 2)
+                (COND [(AND (EQ LEN 2)
                             (NULL (MEMB (CADR ARG) IKL)))
                         (RETURN
-                          (LIST 'COND (LIST (CAR ARG) (CADR ARG>
-                      <<EVERY ARG
-                              '(LAMBDA (XX) (NULL (MEMB XX IKL>
+                          (LIST 'COND (LIST (CAR ARG) (CADR ARG]
+                      [[EVERY ARG
+                              '(LAMBDA (XX) (NULL (MEMB XX IKL]
                         (RETURN
                           (LIST 'COND
                                 (LIST (CAR ARG) (CADR ARG))
-                                (CONS T (CDDR ARG>
+                                (CONS T (CDDR ARG]
                       (T (MAPC (REVERSE ARG)
                                '(LAMBDA
                                   (XX)
                                   (SELECTQ STATE
-                                    <INIT (COND
+                                    [INIT (COND
                                             ((MEMB XX IKL)
                                               (SETQ COL NIL)
                                               (SETQ STATE 'THEN))
                                             (T (SETQ STATE 'COL)
-                                               (SETQ COL (CONS XX NIL>
-                                    <COL (COND
+                                               (SETQ COL (CONS XX NIL]
+                                    [COL (COND
                                            ((MEMB XX IKL)
                                              (SELECTQ XX
                                                (ELSE
@@ -202,7 +202,7 @@
                                                (THEN
                                                  (SETQ STATE 'THEN))
                                                NIL))
-                                           (T (SETQ COL (CONS XX COL>
+                                           (T (SETQ COL (CONS XX COL]
                                     (THEN (SETQ STATE 'COMPL)
                                           (SETQ TOTALCOL
                                             (CONS
@@ -210,13 +210,13 @@
                                               TOTALCOL)))
                                     (COMPL (SETQ STATE 'INIT))
                                     NIL)))
-                         (RETURN (CONS 'COND TOTALCOL>)
+                         (RETURN (CONS 'COND TOTALCOL])
   
 (ITP
   (NLAMBDA ITP-ARG- (EVAL (ITP-C ITP-ARG-))))
   
 (ITP-C
-  <LAMBDA (ARG)
+  [LAMBDA (ARG)
           (PROG (L R)
                 (RETURN (COND ((ATOM ARG) ARG)
                               ((MATCH '(*) ARG)
@@ -310,7 +310,7 @@
                                 (LIST 'EXPT (ITP-C L) (ITP-C R)))
                               ((MATCH '(- (? (1 T NIL R T))) ARG)
                                 (LIST 'MINUS (ITP-C R)))
-                              (ARG>)
+                              (ARG])
   
 (ITP-S
   (LAMBDA (A) (EQ '* A)))

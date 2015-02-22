@@ -6,7 +6,7 @@
   (FSUBR . QUOTE))
   
 (COM-READ
-  <NLAMBDA (COMS-- CH)
+  [NLAMBDA (COMS-- CH)
            (PROG ((COMS (EVAL COMS--)))
                  (COND ((NULL COMS)
                          (SETQ CH (PROMPTTEXT CH))
@@ -14,7 +14,7 @@
                          (PROMPTTEXT CH)
                          (RETURN COMS))
                        (T (SET COMS-- (CDR COMS))
-                          (RETURN (CAR COMS>)
+                          (RETURN (CAR COMS])
   
 (INUNIT
   (LAMBDA (N) (IOTAB 1 N)))
@@ -60,7 +60,7 @@
   (LAMBDA (N) (IOTAB 2 N)))
   
 (SPACES
-  <LAMBDA (N) (IOTAB 6 (PLUS N (IOTAB 6>)
+  [LAMBDA (N) (IOTAB 6 (PLUS N (IOTAB 6])
   
 )
 (PRINT 'IO1FNS)
