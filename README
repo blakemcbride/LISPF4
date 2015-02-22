@@ -52,9 +52,8 @@ Since I have modified the converted C code you should not attempt to
 go from the Fortran code to C without loosing all of my changes.
 The Fortran code as-is will not run with F2C without a few tweaks.
 
-I have found that the system doesn't work when compiled for a 64 bit
-machine.  I therefore changed the compile options to force 32 bit
-executables.
+The system successfully builds on 32 and 64 bit machines.  You may
+need to make some adjustments in f2c.h
 
 The following files are included:
 
