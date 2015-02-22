@@ -68,7 +68,7 @@ Manual.txt	User manual and Implementation guide
 *.l		Lisp source files
 script.?	scripts to build the image files
 f2c.h		used by the .c files
-lisf4.orig	the entire original system
+lisf4.orig	the entire original, untouched system
 1974_InterlispRefMan.pdf   the Interlisp manual
 
 Pre-built executables are located under the Windows, Linux & Mac
