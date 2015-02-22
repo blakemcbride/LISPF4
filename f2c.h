@@ -7,21 +7,26 @@
 #ifndef F2C_INCLUDE
 #define F2C_INCLUDE
 
-typedef long int integer;
-typedef unsigned long int uinteger;
+#define int2	short
+#define int4	int
+#define float4	float
+#define float8	double
+
+typedef int4 integer;
+typedef unsigned int4 uinteger;
 typedef char *address;
-typedef short int shortint;
-typedef float real;
-typedef double doublereal;
+typedef int2 shortint;
+typedef float4 real;
+typedef float8 doublereal;
 typedef struct { real r, i; } complex;
 typedef struct { doublereal r, i; } doublecomplex;
-typedef long int logical;
-typedef short int shortlogical;
+typedef int4 logical;
+typedef int2 shortlogical;
 typedef char logical1;
 typedef char integer1;
 #ifdef INTEGER_STAR_8	/* Adjust for integer*8. */
-typedef long long longint;		/* system-dependent */
-typedef unsigned long long ulongint;	/* system-dependent */
+typedef int8 longint;		/* system-dependent */
+typedef unsigned int8 ulongint;	/* system-dependent */
 #define qbit_clear(a,b)	((a) & ~((ulongint)1 << (b)))
 #define qbit_set(a,b)	((a) |  ((ulongint)1 << (b)))
 #endif
@@ -38,13 +43,13 @@ typedef unsigned long long ulongint;	/* system-dependent */
 
 #ifdef f2c_i2
 /* for -i2 */
-typedef short flag;
-typedef short ftnlen;
-typedef short ftnint;
+typedef int2 flag;
+typedef int2 ftnlen;
+typedef int2 ftnint;
 #else
-typedef long int flag;
-typedef long int ftnlen;
-typedef long int ftnint;
+typedef int4 flag;
+typedef int4 ftnlen;
+typedef int4 ftnint;
 #endif
 
 /*external read, write*/
