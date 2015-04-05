@@ -10,6 +10,10 @@
 
 double	pow(), fmod();
 
+
+#define SHOWINT(x)	fprintf(stderr, #x " = %d\n", x)
+
+
 //#define FORTRAN_LIB
 
 /* Common Block Declarations */
@@ -2571,7 +2575,7 @@ L10:
     --a_1.natomp;
 /* L11: */
     i__1 = k;
-    for (i__ = 1; i__ <= i__1 || i__ == 1; ++i__) {
+    for (i__ = 1; i__ <= i__1; ++i__) {  /* fix CONCAT not to make minimum number of characters 1  */
 	putch_((char *)b_1.pname, &b_1.prbuff[i__ - 1], &a_1.jbp);
 	b_1.prbuff[i__ - 1] = chars_1.space;
 /* L12: */

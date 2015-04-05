@@ -4,6 +4,11 @@
 */
 
 #include "f2c.h"
+#include <stdio.h>
+
+
+#define SHOWINT(x)	fprintf(stderr, #x " = %d\n", x)
+
 
 static int shostk_(void);
 
