@@ -5120,25 +5120,6 @@ L5:
     return 0;
 } /* dmpout_ */
 
-integer mslft_(integer *i__)
-{
-    /* System generated locals */
-    integer ret_val;
-
-    ret_val = 0;
-    return ret_val;
-} /* mslft_ */
-
-/* Subroutine */ int mtime_(integer *it)
-{
-    return 0;
-} /* mtime_ */
-
-/* Subroutine */ int mdate_(integer *it)
-{
-    return 0;
-} /* mdate_ */
-
 doublereal openf_(integer *i__)
 {
     /* System generated locals */

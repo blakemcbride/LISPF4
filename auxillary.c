@@ -1,7 +1,12 @@
 
+#include "f2c.h"
+#undef abs
 #include <stdio.h>
 #include <stdlib.h>
 #include <ctype.h>
+#include <string.h>
+#include <time.h>
+
 int getch_(char *vec, char *ch, int *i)
 {
     ch[0] = vec[*i-1];
@@ -10,11 +15,13 @@ int getch_(char *vec, char *ch, int *i)
     ch[3] = ' ';
     return 0;
 }
+
 int putch_(char *vec, char *ch, int *i)
 {
     vec[*i-1] = *ch;
     return 0;
 }
+
 int upcase_(char *buff, int *n)
 {
 	int	i, x;
@@ -22,12 +29,15 @@ int upcase_(char *buff, int *n)
 		buff[x] = toupper(buff[x]);
 	return 0;
 }
+
 static	FILE	*Logical_units[100];
+
 void	setup()
 {
 	Logical_units[5] = stdin;
 	Logical_units[6] = stdout;
 }
+
 int	f4_open(int lun, char *file, char *mode)
 {
 	if (Logical_units[lun])
@@ -35,6 +45,7 @@ int	f4_open(int lun, char *file, char *mode)
 	Logical_units[lun] = fopen(file, mode);
 	return Logical_units[lun] ? 0 : 1;
 }
+
 int	f4_close(int lun)
 {
 	if (Logical_units[lun]) {
@@ -43,11 +54,14 @@ int	f4_close(int lun)
 	}
 	return 0;
 }
+
 static	int	read_status;  /*  1=do read,  2=at eol, 3=at eof  */
+
 void	f4_start_read()
 {
 	read_status = 1;
 }
+
 static	int	read1(FILE *fp)
 {
 	int	c;
@@ -65,6 +79,7 @@ static	int	read1(FILE *fp)
 		c = ' ';
 	return c;
 }
+
 int	f4_read(int lun, int *ci, int n)
 {
 	FILE	*fp = Logical_units[lun];
@@ -84,6 +99,7 @@ int	f4_read(int lun, int *ci, int n)
 	}
 	return 0;
 }
+
 int	f4_readu(int lun, int *ci, int n)
 {
 	FILE	*fp = Logical_units[lun];
@@ -96,12 +112,14 @@ int	f4_readu(int lun, int *ci, int n)
 	}
 	return 0;
 }
+
 int	f4_rewind(int lun)
 {
 	FILE	*fp = Logical_units[lun];
 	rewind(fp);
 	return 0;
 }
+
 int	f4_write(int lun, int *ci, int n)
 {
 	FILE	*fp = Logical_units[lun];
@@ -114,9 +132,54 @@ int	f4_write(int lun, int *ci, int n)
 	}
 	return 0;
 }
+
 int	f4_write_lf(int lun)
 {
 	FILE	*fp = Logical_units[lun];
 	putc('\n', fp);
 	return 0;
 }
+
+integer mslft_(integer *i__)
+{
+    /* System generated locals */
+    integer ret_val;
+
+    ret_val = 0;
+    return ret_val;
+} /* mslft_ */
+
+/* Subroutine */ int mtime_(integer *it)
+{
+    return 0;
+} /* mtime_ */
+
+/* Subroutine */ int mdate_(integer *it)
+{
+	static char mname[12][4] = {
+		"Jan",
+		"Feb",
+		"Mar",
+		"Apr",
+		"May",
+		"Jun",
+		"Jul",
+		"Aug",
+		"Sep",
+		"Oct",
+		"Nov",
+		"Dec"
+	};
+	char *p = (char *)it;
+	time_t sec = time(NULL);
+	struct tm *t = localtime(&sec);
+	sprintf(p, "%02d-%s-%4d %02d:%02d:%02d",
+		t->tm_mday,
+		mname[t->tm_mon],
+		t->tm_year+1900,
+		t->tm_hour,
+		t->tm_min,
+		t->tm_sec);
+
+	return 0;
+} /* mdate_ */

@@ -88,6 +88,7 @@ static integer c__9 = 9;
 static integer c__2 = 2;
 static integer c_n5 = -5;
 static integer c_n10 = -10;
+static integer c_n20 = -20;
 static integer c__3 = 3;
 static integer c__5 = 5;
 static integer c__14 = 14;
@@ -1581,14 +1582,14 @@ L10130:
     mdate_(b_1.buff);
 /*              YOU CAN CHANGE THE 10 IN THE DO STATEMENT BELOW IF YOU */
 /*              HAVE A DATE FORMAT THAT IS NOT 10 CHARACTERS LONG */
-    for (i__ = 1; i__ <= 10 || i__ == 1; ++i__) {
+    for (i__ = 1; i__ <= 20 || i__ == 1; ++i__) {
 	getch_(b_1.buff, &b_1.temp1, &i__);
 	b_1.abuff[i__ - 1] = b_1.temp1;
 /* L10135: */
     }
 /*              THE TWO OCCURENCES OF 10 BELOW MUST ALSO BE CHANGED */
-    b_1.abup1 = 10;
-    *ires = matom_(&c_n10);
+    b_1.abup1 = 20;
+    *ires = matom_(&c_n20);
     goto L998;
 /* ----------------------------------------------------------------------- */
 /*        SUBR 1 (WITH NUMERICAL ARG IN N) */
