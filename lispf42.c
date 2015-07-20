@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
+#include <signal.h>
 #include "f2c.h"
 
 double	pow(), fmod();
@@ -267,16 +268,6 @@ L10:
     return 0;
 } /* MAIN__ */
 
-
-/* Subroutine */ int brserv_(void)
-{
-/* --  INTERRUPT HANDLER */
-/* OMMON AND INTEGER DECLARATIONS */
-/* OMMON AND INTEGER DECLARATIONS END */
-    b_1.errtyp = 26;
-    b_1.ibreak = TRUE_;
-    return 0;
-} /* brserv_ */
 
 /* Subroutine */ int apush_(integer *i__)
 {
@@ -5367,12 +5358,23 @@ L10000:
     return 0;
 } /* mkcha_ */
 
+/* Subroutine */ static void brserv_(void)
+{
+/* --  INTERRUPT HANDLER */
+/* OMMON AND INTEGER DECLARATIONS */
+/* OMMON AND INTEGER DECLARATIONS END */
+    b_1.errtyp = 26;
+    b_1.ibreak = TRUE_;
+} /* brserv_ */
+
+
 /* Subroutine */ int brset_(void)
 {
 /* -- THIS SUBROUTINE IS CALLED INITIALLY AND SHOULD SET UP TERMINAL */
 /* -- INTERRUPTS SO THAT THE SUBROUTINE BRSERV IS CALLED WHENEVER THE */
 /* -- USER TYPES AN INTERRUPT CHARACTER (E.G. CTRL-H ON DEC, */
 /* -- CTRL-C ON VAX11, BREAK ON IBM) */
+	signal(SIGINT, brserv_);
     return 0;
 } /* brset_ */
 
