@@ -6,9 +6,11 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 #include "f2c.h"
 
 double	pow(), fmod();
+extern time_t start_time;
 
 
 #define SHOWINT(x)	fprintf(stderr, #x " = %d\n", x)
@@ -156,6 +158,7 @@ int	main(int argc, char *argv[])
 	    lspex_(void), lispf4_(integer *);
     extern integer rollin_(integer *);
 
+    start_time = time(NULL);
 /* -- SET UP INTERRUPT HANDLER */
     brset_();
 

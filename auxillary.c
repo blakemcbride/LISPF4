@@ -140,12 +140,13 @@ int	f4_write_lf(int lun)
 	return 0;
 }
 
+time_t start_time;
+
 integer mslft_(integer *i__)
 {
     /* System generated locals */
     integer ret_val;
-
-    ret_val = 0;
+    ret_val = (integer) (time(NULL) - start_time);
     return ret_val;
 } /* mslft_ */
 
