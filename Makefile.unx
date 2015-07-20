@@ -1,3 +1,4 @@
+# Makefile for GNU Make on Linux (32 or 64 bit)
 
 # compile for 32 bit machine (works on 64 bit machines too)
 #M32 = -m32
@@ -16,7 +17,7 @@ BARE.IMG : lispf4 SYSATOMS script.1
 
 
 lispf4 : lispf41.o lispf42.o auxillary.o
-	gcc -o lispf4 $(M32) -g -O lispf41.o lispf42.o auxillary.o -lm
+	gcc -o $@ $(M32) -O $^ -lm
 
 #lispf41.c : lispf41.f
 #	f2c -onetrip -A -h $<

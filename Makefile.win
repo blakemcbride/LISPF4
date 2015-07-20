@@ -1,3 +1,4 @@
+# Makefile for Windows
 
 #F2C = \f2c-new\f2c
 #LIB = \f2c-new\vcf2c.lib
