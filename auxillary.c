@@ -1,11 +1,11 @@
 
-#include "f2c.h"
-#undef abs
 #include <stdio.h>
 #include <stdlib.h>
 #include <ctype.h>
 #include <string.h>
 #include <time.h>
+#include "f2c.h"
+
 
 int getch_(char *vec, char *ch, int *i)
 {

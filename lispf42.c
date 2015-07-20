@@ -469,7 +469,7 @@ integer garb0_(integer *i1, integer *i2)
 integer subpr_(integer *ix, integer *iy, integer *is)
 {
     /* System generated locals */
-    integer ret_val;
+    integer ret_val=0;
 
     /* Local variables */
     static integer icdr;
@@ -5124,10 +5124,10 @@ L5:
     return 0;
 } /* dmpout_ */
 
-doublereal openf_(integer *i__)
+integer openf_(integer *i__)
 {
     /* System generated locals */
-    real ret_val;
+    real ret_val = 0;
 
     *i__ = 0;
     return ret_val;
