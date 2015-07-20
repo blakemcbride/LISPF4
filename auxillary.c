@@ -80,10 +80,9 @@ static	int	read1(FILE *fp)
 	return c;
 }
 
-int	f4_read(int lun, int *ci, int n)
+int	f4_read(int lun, char *v, int n)
 {
 	FILE	*fp = Logical_units[lun];
-	char	*v = (char *) ci;
 	int	c;
 	if (read_status == 3)
 		return 1;
@@ -100,10 +99,9 @@ int	f4_read(int lun, int *ci, int n)
 	return 0;
 }
 
-int	f4_readu(int lun, int *ci, int n)
+int	f4_readu(int lun, char *v, int n)
 {
 	FILE	*fp = Logical_units[lun];
-	char	*v = (char *) ci;
 	v[0] = getc(fp);
 	if (n == 4) {
 		v[1] = getc(fp);
@@ -120,10 +118,9 @@ int	f4_rewind(int lun)
 	return 0;
 }
 
-int	f4_write(int lun, int *ci, int n)
+int	f4_write(int lun, char *v, int n)
 {
 	FILE	*fp = Logical_units[lun];
-	char	*v = (char *) ci;
 	putc(v[0], fp);
 	if (n == 4) {
 		putc(v[1], fp);

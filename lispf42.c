@@ -11,8 +11,18 @@
 #include "f2c.h"
 
 double	pow(), fmod();
+
 extern time_t start_time;
 
+extern int f4_open(int lun, char *file, char *mode);
+extern int f4_close(int lun);
+extern void setup(void);
+extern int f4_readu(int lun, char *v, int n);
+extern void f4_start_read(void);
+extern int f4_read(int lun, char *v, int n);
+extern int f4_write(int lun, char *v, int n);
+extern int f4_write_lf(int lun);
+extern int f4_rewind(int lun);
 
 #define SHOWINT(x)	fprintf(stderr, #x " = %d\n", x)
 
@@ -1934,7 +1944,7 @@ L3010:
     goto L3040;
 /*                                      NOT PROG. */
 L3020:
-    if (! (x > a_1.natom && x <= a_1.nfreet || gllbef != b_1.nil)) {
+    if (!((x > a_1.natom && x <= a_1.nfreet) || gllbef != b_1.nil)) {
 	goto L3030;
     }
 L3025:
@@ -3223,7 +3233,7 @@ L2010:
     ++b_1.prtpos;
     b_1.cht = 10;
     j = getcht_(&b_1.chr);
-    if (j >= 9 && j < 23 || j >= 25) {
+    if ((j >= 9 && j < 23) || j >= 25) {
 	b_1.cht = j;
     }
     return 0;
@@ -4209,7 +4219,7 @@ L30:
     if (b_1.ibreak) {
 	goto L35;
     }
-    if (naleft == 9 || nbnow >= 50 && nbleft < 50) {
+    if (naleft == 9 || (nbnow >= 50 && nbleft < 50)) {
 	goto L50;
     }
 L35:

@@ -2176,8 +2176,7 @@ L12150:
 L12160:
     iprev = jaan_1.tops;
     b_1.temp1 = getnum_(&b_1.arg2);
-    if (b_1.temp1 > jaan_1.tops || b_1.temp1 != 0 && jaan_1.jack[b_1.temp1 - 
-	    1] > 0) {
+    if (b_1.temp1 > jaan_1.tops || (b_1.temp1 != 0 && jaan_1.jack[b_1.temp1 - 1] > 0)) {
 	goto L25035;
     }
     ++jaan_1.tops;
@@ -2876,8 +2875,7 @@ L15010:
 L15012:
     iprev = jaan_1.tops;
     b_1.temp1 = getnum_(&b_1.arg3);
-    if (b_1.temp1 > jaan_1.tops || b_1.temp1 != 0 && jaan_1.jack[b_1.temp1 - 
-	    1] > 0) {
+    if (b_1.temp1 > jaan_1.tops || (b_1.temp1 != 0 && jaan_1.jack[b_1.temp1 - 1] > 0)) {
 	goto L25036;
     }
     ++jaan_1.tops;
