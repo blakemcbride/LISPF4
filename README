@@ -100,7 +100,7 @@ In addition to loading lisp source files, lispf4 has the ability to
 save/load binary images of a running system.  This enables you to load
 an entire pre-loaded image in a short time.  Initially, if no image
 file is being loaded, the system requires the SYSATOMS file in order
-to builds its internal system.  If an image file is being loaded the
+to build its internal system.  If an image file is being loaded the
 SYSATOMS file is not needed or used.  Typically, one builds an image
 which contains the common lisp functions and uses that as the base
 system.
@@ -135,11 +135,10 @@ This causes lispf4 to startup and load FILE.IMG.  SYSATOMS is not used.
 This causes lispf4 to set the number of cons cells to 200000 and load
 BASIC.IMG.
 
-I'm not sure if you can mix different startup parameters with
-different image files.  In other words, I don't think you can run the
-system with one configuration, save an image, and then load it with a
-lispf4 which was started with a different set of parameters.  Someone
-should look into this.
+You cannot mix different startup parameters with different image
+files.  In other words, you cannot run the system with one
+configuration, save an image, and then load it with a lispf4 which was
+started with a different set of parameters.
 
 
 
