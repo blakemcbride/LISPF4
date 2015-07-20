@@ -5358,7 +5358,7 @@ L10000:
     return 0;
 } /* mkcha_ */
 
-/* Subroutine */ static void brserv_(void)
+/* Subroutine */ static void brserv_(int sig)
 {
 /* --  INTERRUPT HANDLER */
 /* OMMON AND INTEGER DECLARATIONS */
