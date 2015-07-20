@@ -59,7 +59,8 @@ static	int	read1(FILE *fp)
 		} else if (c == EOF  &&  (ferror(fp)  ||  feof(fp))) {
 			read_status = 3;
 			c = ' ';
-		}
+		} else if (c == '\t'  ||  c == '\f'  ||  c == '\v')
+			c = ' ';
 	} else
 		c = ' ';
 	return c;
