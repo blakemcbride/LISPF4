@@ -12,9 +12,11 @@ The current status of the C conversion eliminates the need for a FORTRAN compile
 
 Interlisp is a dynamically scoped lisp system.  It has no macro facility but supports LAMBDA (evaluates function arguments), NLAMBDA (doesn't evaluate its arguments), and variable number of arguments.  Macros are not hard to simulate.
 
-The system comes with a pretty complete user manual and implementors manual.
+The system comes with a pretty complete user manual and implementors manual.  I also include the documentation this system is based on.
 
-See the README file for an expanded version of this file.
+See the Documentation/README.txt file for more complete documentation.
+
+The master copy of this system is located at:  https://github.com/blakemcbride/LISPF4
 
 Enjoy.
 

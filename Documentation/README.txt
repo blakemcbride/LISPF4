@@ -55,32 +55,37 @@ The Fortran code as-is will not run with F2C without a few tweaks.
 The system successfully builds on 32 and 64 bit machines.  You may
 need to make some adjustments in f2c.h
 
-The following files are included:
+The following files are included in the top directory:
 
-README		this file
 lispf41.f	Fortran source - part 1 of 2
 lispf42.f	Fortran source - part 2 of 2
+lispf4?.c	C version of Fortran code
+auxillary.c	Auxiliary C functions
 f4com.for	the Fortran common declarations
 SYSATOMS	system atoms needed when generating a new system
-Makefile	makefile for Windows NT using NMAKE
-Makefile.unx	makefile for linux or Mac
-Manual.txt	User manual and Implementation guide
+Makefile.win	makefile for Windows NT using NMAKE
+Makefile.unx	makefile for Linux or Mac
 *.l		Lisp source files
 script.?	scripts to build the image files
 f2c.h		used by the .c files
 lisf4.orig	the entire original, untouched system
-1974_InterlispRefMan.pdf   the Interlisp manual
+
+Under Documentation:
+
+README.txt
+UsersGuide.txt
+ImplementationGuide.txt
+Haraldson-LISP_details.pdf
+Interlisp-Oct_1978.pdf
+p501-schorr.pdf
 
 Pre-built executables are located under the Windows, Linux & Mac
 directories.
 
-You can find an Interlisp reference manual at:
-http://www.bitsavers.org/pdf/xerox/interlisp/1974_InterlispRefMan.pdf
 
-F2C (the Fortran to C converter) can be obtained at:
-	http://netlib.bell-labs.com/netlib/master/index.html
-        ftp://ftp.netlib.org/f2c
-        ftp://netlib.bell-labs.com/netlib/f2c
+Note that you do not want to re-convert the Fortran into C since I
+have hand-modified the C files.  All work should be done in the C
+files only.  The Fortran code is for reference only.
 
 
 Building the system
@@ -88,7 +93,7 @@ Building the system
 
 Make lispf4.exe and the two image files by typing:
 
-Window/MSVC:   nmake
+Window/MSVC:   nmake -f Makefile.win
 
 Linux or Mac:   make -f Makefile.unx 
 
