@@ -816,9 +816,9 @@ Other functions not reported in Ha 75 are:
              (RPTQ n s)       as RPT but s is not evaluated at calling
                               time.
              (SIGN n)         0 or 1 or -1 depending on the sign of n
-             (CLOCK)          time in milliseconds.
+             (CLOCK)          time in seconds since system startup
              (TIME)           time of the day
-             (DATE)           current date
+             (DATE)           current date dd-mmm-yyyy hh:mm:ss
                               Note that the implementation of CLOCK, TIME,
                               and DATE are machine dependent. They are
                               implemented by the subroutines MSLFT, TIME,

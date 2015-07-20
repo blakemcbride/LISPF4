@@ -152,7 +152,13 @@ integer mslft_(integer *i__)
 
 /* Subroutine */ int mtime_(integer *it)
 {
-    return 0;
+	char *p = (char *)it;
+	time_t sec = time(NULL);
+	struct tm *t = localtime(&sec);
+	sprintf(p, "%02d:%02d",
+		t->tm_hour,
+		t->tm_min);
+	return 0;
 } /* mtime_ */
 
 /* Subroutine */ int mdate_(integer *it)
