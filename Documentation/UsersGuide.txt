@@ -572,7 +572,7 @@ logical unit 25.
         (DE ....]
         (DE ....]
         etc.
-        (MAKEFILE 'MYFILE T)
+        (MAKEFILE 'MYFILE "filename.l" T)
  
 A pretty printed version of all functions is now written on unit 25
 (argument no 2 is used as PRIN0's argument no 3 when it performs the
@@ -660,7 +660,9 @@ In what follows cexpr is the current expression.
  
 The following commands are implemented.
 
-        OK               Leaves the editor
+        OK               Saves the changes and leaves the editor
+	STOP             Exits the editor without saving
+	SAVE             Saves edit for future edit session (only EDITF)
  
 Display:
 

@@ -1,6 +1,6 @@
 (FILEHEADER EDIT)
 (PRINT 'EDIT-PACKAGE)
-(PRINT '(VERSION 3))
+(PRINT '(VERSION 4))
 (DEFINEQ
 (EDFIND1ST
   [LAMBDA (A S TRC)
@@ -37,10 +37,27 @@
                       ((SETQ S (CDR S)) (GO LOOP])
   
 (EDITF
-  (NLAMBDA (FN . L) (EDITS (VIRGINFN FN) L) FN))
+  (NLAMBDA (FN . L)
+           (PROG ((ESF (GETPROP FN 'EDIT-SAVE))
+                   (VF (VIRGINFN FN))
+                   RESULT EXIT-TYPE FN-COPY)
+                 (SETQ FN-COPY (COPY (OR ESF VF)))
+                 (SETQ RESULT (EDITS-INT (OR ESF VF) FN-COPY L))
+                 (SELECTQ EXIT-TYPE
+                   (OK (REMPROP FN 'EDIT-SAVE) (PUTD FN RESULT))
+                   (SAVE (PUTPROP FN 'EDIT-SAVE RESULT)
+                         (PUTD FN FN-COPY))
+                   [STOP (COND (ESF (PUTPROP FN 'EDIT-SAVE RESULT))
+                               (T (PUTD FN RESULT]
+                   NIL)
+                 (RETURN FN))))
   
 (EDITP
-  (NLAMBDA (A . L) (EDITS (GETPROPLIST A) L) A))
+  (NLAMBDA (A . L)
+           (PROG (EXIT-TYPE VAL)
+                 (SETQ VAL (EDITS-INT (GETPROPLIST A) L))
+                 (AND (EQ EXIT-TYPE 'STOP) (SETPROPLIST A VAL))
+                 (RETURN VAL))))
   
 (EDITPR
   [LAMBDA (X PP DEPTH)
@@ -59,10 +76,13 @@
                   (T (COND (PP (PRIN0 X T 0) (TERPRI))
                            (T (PRINT X])
   
-(EDITS
-  (LAMBDA (S EDCOM)
+(EDITS-INT
+  (LAMBDA (S S-OLD EDCOM)
           (PROG (CL CTLS TEMP X A B L)
-                (AND (NLISTP S) (PRINT "NOT EDITABLE") (RETURN NIL))
+                (AND (NLISTP S)
+                     (PRINT "NOT EDITABLE")
+                     (SETQ EXIT-TYPE 'CANT-EDIT)
+                     (RETURN NIL))
                 [AND EDCOM (SETQ EDCOM (APPEND EDCOM '(OK]
            START
            B    (SETQ CL S)
@@ -219,7 +239,10 @@
                       (T (SELECTQ X
                            (P (EDITPR CL NIL 2))
                            (PP (EDITPR CL T 2))
-                           (OK (RETURN S))
+                           (OK (SETQ EXIT-TYPE 'OK) (RETURN S))
+                           (STOP (SETQ EXIT-TYPE 'STOP)
+                                 (RETURN S-OLD))
+                           (SAVE (SETQ EXIT-TYPE 'SAVE) (RETURN S))
                            [UP (COND ((TAILP CL (CADR CTLS)))
                                      ((NULL (CDR CTLS)) (GO TOP))
                                      (T (SETQ CTLS (CDR CTLS))
@@ -277,7 +300,7 @@
 )
 (PRINT 'EDITFNS)
 (RPAQQ EDITFNS
-       (EDFIND1ST EDFIND1ST2 EDITF EDITP EDITPR EDITS EDMSG EDSMASH))
+       (EDFIND1ST EDFIND1ST2 EDITF EDITP EDITPR EDITS-INT EDMSG EDSMASH))
 (RPAQQ EDITCOMS EDIT-PACKAGE)
-(RPAQ EDITGENNR 3)
+(RPAQ EDITGENNR 7)
 STOP
