@@ -74,6 +74,7 @@ Under Documentation:
 
 README.txt
 UsersGuide.txt
+DevelopmentProcess.txt
 ImplementationGuide.txt
 Haraldson-LISP_details.pdf
 Interlisp-Oct_1978.pdf

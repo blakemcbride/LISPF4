@@ -1,0 +1,97 @@
+
+LISPF4/InterLisp Development Process Notes
+
+Typical (non-InterLisp) development process:
+
+1.  Edit source language as text file using an editor
+2.  Startup the Lisp system
+3.  Load the source text files
+4.  Test system
+5.  Back to 1.
+
+InterLisp way
+
+1.  Startup InterLisp
+2.  Load binary image of the system you wish to run or edit
+3.  Edit the system using the included structure editor
+4.  Save binary image
+5.  Back to 3.
+
+So, in non-InterLisp systems the code is contained in the text source
+files.
+
+In InterLisp, the code is in the binary image.  You can, however,
+write out and load a text form of the code like in other lisps if
+desired, but the work is generally done within the image.
+
+An image is saved with:  (SYSOUT "file.img")
+
+An image is loaded with:  (SYSIN "file.img")
+
+The structure editor is defined in the User Guide and is named EDITF.
+Note that you cannot edit a non-existing function.  You must define it
+in the normal way before you can edit it.
+
+Usage:  (EDITF MyFunc)
+
+----------------------------------------------------------------------
+
+The Package System
+
+Although the User Guide describes the MAKEFILE package, I think it may
+be clearer for me to describe it in modern terms.
+
+Interlisp does not have true packages and namespaces like other Lisps.
+Although all functions and variables are in the same namespace,
+InterLisp has a way of grouping them.  This grouping has nothing to do
+with visibility.  It only allows a developer to save and load a number
+of functions as a group.
+
+InterLisp uses the terms "FILE" and "LIB" in a very inconsistent and
+confusing way.  Although I have not modified the system to clean this
+up, I would like to explain it in terms that may make more sense.
+(It wouldn't be InterLisp then.)
+
+I am going to use the modern term "package" to refer to a group of
+functions, variables, etc..  When I use the term "file", I mean a file
+on disk.  The package concept in InterLisp shares the notion of
+treating a group of functions and variables as a unit, but it does not
+share the notions of visibility or encapsulation.
+
+In terms of notation, I will use lower-case letters to signify a
+variable part, and upper-case letters to indicate the hard-coded part
+of names.
+
+InterLisp package (my term) variables:
+
+CURLIBS		a list of all of the packages loaded or created
+
+CURFILE		the current package name
+
+pkgFNS		all of the function names in package pkg (e.g. EDITFNS
+                for the EDIT package)
+
+pkgVARS         variables in the package (added manually)
+
+pkgCOMS         package comments (created manually)
+
+pkgGENNR        package version number (gets auto-incremented)
+
+InterLisp package functions:
+
+(CURFILE pkg)	sets the current package.  e.g. (CURFILE EDIT)
+         	If the pkg didn't already exist, it is created.
+                Note that all functions defined after this command
+		is executed will be automatically added to the
+		current package
+
+(MAKEFILE 'pkg "myfile.lsp" flg)
+                saves all of the functions and variables in package
+		pkg into disk file names "myfile.lsp"
+		flg = T    = pretty print
+		flg = null = just write it all out without formatting
+
+(LOAD "myfile.lsp")
+                This loads a file saved with MAKEFILE
+		It also sets the current package to whatever package
+		"myfile.lsp" is designated as internally
