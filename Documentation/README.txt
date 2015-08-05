@@ -241,9 +241,9 @@ APPLY
 EVALA
 RPT
 RPTQ
-DE  (DL)
-DF  (DN)
-
+DE  (define lambda function)
+DF  (define nlambda function)
+DM  (define macro)
 
 
 
