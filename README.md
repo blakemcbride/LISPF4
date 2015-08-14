@@ -10,7 +10,7 @@ The system supports much of the InterLisp standard, and a few bits of the standa
 
 The current status of the C conversion eliminates the need for a FORTRAN compiler or F2C.  It is all C code now.  I've had it working on Windows, Mac, and Linux.
 
-Interlisp is a dynamically scoped lisp system.  It has no macro facility but supports LAMBDA (evaluates function arguments), NLAMBDA (doesn't evaluate its arguments), and variable number of arguments.  Macros are not hard to simulate.
+Interlisp is a dynamically scoped lisp system.  It supports LAMBDA (evaluates function arguments), NLAMBDA (doesn't evaluate its arguments), and variable number of arguments.  Macros are supported as well.
 
 The system comes with a pretty complete user manual and implementors manual.  I also include the documentation this system is based on.
 
