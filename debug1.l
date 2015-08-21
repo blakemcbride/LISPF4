@@ -1,29 +1,12 @@
 (FILEHEADER DEBUG1)
 (PRINT 'DEBUG1-PACKAGE)
-(PRINT '(VERSION 5))
+(PRINT '(VERSION 6))
 (DEFINEQ
-(HELP
-  (LAMBDA (HELPX HELPY)
-          (PROG NIL
-                (TERPRI T)
-                (PRIN1 "HELP:" T)
-                (TERPRI T)
-                (PRIN1 HELPX T)
-                (TERPRI T)
-                (PRIN1 HELPY T)
-           LOOP (NLSETQ (PROGN (TERPRI T)
-                               (PRIN1 '":" T)
-                               (PRINT (EVAL (READ T)) T)))
-                (GO LOOP))))
-  
-(ERSETQ
-  (NLAMBDA (ERSETX) (ERRORSET ERSETX T)))
-  
-(NLSETQ
-  (NLAMBDA (NLSETX) (ERRORSET NLSETX NIL)))
-  
 (*ARGLIST
   (LAMBDA (X) (CADR (GETD X))))
+  
+(ABC
+  NIL)
   
 (BREAK-BT
   (LAMBDA (AL BTV)
@@ -152,8 +135,28 @@
            ERRORSET
                 (RETURN NIL))))
   
+(ERSETQ
+  (NLAMBDA (ERSETX) (ERRORSET ERSETX T)))
+  
+(HELP
+  (LAMBDA (HELPX HELPY)
+          (PROG NIL
+                (TERPRI T)
+                (PRIN1 "HELP:" T)
+                (TERPRI T)
+                (PRIN1 HELPX T)
+                (TERPRI T)
+                (PRIN1 HELPY T)
+           LOOP (NLSETQ (PROGN (TERPRI T)
+                               (PRIN1 '":" T)
+                               (PRINT (EVAL (READ T)) T)))
+                (GO LOOP))))
+  
 (KWOTE
   (LAMBDA (X) (LIST 'QUOTE X)))
+  
+(NLSETQ
+  (NLAMBDA (NLSETX) (ERRORSET NLSETX NIL)))
   
 (PRVARS
   [LAMBDA (L AL)
@@ -180,11 +183,11 @@
 )
 (PRINT 'DEBUG1FNS)
 (RPAQQ DEBUG1FNS
-       (ABC HELP ERSETQ NLSETQ *ARGLIST BREAK-BT BREAK-EVAL BREAK-SKIP 
-            BREAK-SKIP1 BREAK1 BREAK11 BT-PRINT ERRORB ERRORN ERRORSET KWOTE 
-            PRVARS PRVARS1 SYSERROR))
+       (*ARGLIST ABC BREAK-BT BREAK-EVAL BREAK-SKIP BREAK-SKIP1 BREAK1 BREAK11 
+         BT-PRINT ERRORB ERRORN ERRORSET ERSETQ HELP KWOTE NLSETQ PRVARS 
+         PRVARS1 SYSERROR))
 (RPAQQ DEBUG1COMS DEBUG1-PACKAGE)
-(RPAQ DEBUG1GENNR 5)
+(RPAQ DEBUG1GENNR 6)
 (PRINT 'DEBUG1VARS)
 [RPAQQ DEBUG1VARS
        ((P (RPAQ *PRINTLEVEL 3)
