@@ -232,6 +232,7 @@ GETD
 PUTD
 PUTDQ
 GETDQ
+DEFINE
 DEFINEQ
 SAVEDEF
 UNSAVEDEF
@@ -410,6 +411,10 @@ VIRGINFN
 ADVISE
 UNADVISE
 READVISE
+
+HELP
+NLSETQ
+ERSETQ
 
 ----------------------------------------------------------------------
 

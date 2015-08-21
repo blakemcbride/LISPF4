@@ -1,7 +1,34 @@
 (FILEHEADER FUNC1)
 (PRINT 'FUNC1-PACKAGE)
-(PRINT '(VERSION 2))
+(PRINT '(VERSION 3))
 (DEFINEQ
+(DEFINE
+  [LAMBDA (X)
+          (COND ((NULL X) NIL)
+                (T (CONS ((LAMBDA
+                            (Y CY)
+                            [COND [(ATOM Y)
+                                    (HELP (CONS Y
+                                            '(- INCORRECT DEFINING FORM]
+                                  (T (COND ((GETD CY)
+                                             (VIRGINFN CY T)))
+                                     (PUTD CY
+                                           (COND
+                                             [(NULL (CDDR Y))
+                                               (COND
+                                                 [(EQ (CAADR Y)
+                                                      'NLAMDA)
+                                                   (CONS 'NLAMBDA
+                                                     (CONS
+                                                       (CAADR (CADR Y))
+                                                       (CDDADR Y]
+                                                 (T (CADR Y]
+                                             (T (CONS 'LAMBDA (CDR Y]
+                            (CAR Y))
+                           (CAR X)
+                           (CAAR X))
+                         (DEFINE (CDR X])
+  
 (DE
   (NLAMBDA L (PUTD (CAR L) (CONS 'LAMBDA (CDR L))) (CAR L)))
   
@@ -39,9 +66,9 @@
   
 )
 (PRINT 'FUNC1FNS)
-(RPAQQ FUNC1FNS (DE DF DM GETD SAVEDEF UNSAVEDEF VIRGINFN))
+(RPAQQ FUNC1FNS (DEFINE DE DF DM GETD SAVEDEF UNSAVEDEF VIRGINFN))
 (RPAQQ FUNC1COMS FUNC1-PACKAGE)
-(RPAQ FUNC1GENNR 2)
+(RPAQ FUNC1GENNR 3)
 (PRINT 'FUNC1VARS)
 [RPAQQ FUNC1VARS
        ((P (RPAQ CURFNS NIL)
