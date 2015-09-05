@@ -749,7 +749,8 @@ Parenthesis manipulation:
 	                 n'th element.  All elements after the n'th element
 	                 are deleted.
         (RI n m)         Right In.  Move the parenthesis at the end of the
-	                 n'th element in to after the m'th element.
+	                 n'th element in to after the m'th element inside
+			 the n'th element.
         (RO n)           Right Out.  Move the right parenthesis of the n'th
 	                 element to the end of the current expression.  All
 	                 elements following the n'th element are moved
