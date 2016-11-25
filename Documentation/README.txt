@@ -134,7 +134,7 @@ This causes a bare system to startup and SYSATOMS will be loaded.
 
 	lispf4  BASIC.IMG
 
-This causes lispf4 to startup and load FILE.IMG.  SYSATOMS is not used.
+This causes lispf4 to startup and load BASIC.IMG.  SYSATOMS is not used.
 
 	lispf4 -c200000  BASIC.IMG
 
