@@ -272,6 +272,7 @@ RPTQ
 DE  (define lambda function)
 DF  (define nlambda function)
 DM  (define macro)
+DEFUN
 
 
 
@@ -358,6 +359,8 @@ LEQ
 MIN
 MAX
 ABS
++ - * /
+= > < >= >=
 
 
 Print Names & Strings
@@ -422,6 +425,8 @@ SYSIN
 SYSOUT
 GCGAG
 RECLAIM
+EXIT QUIT LOGOUT
+-*-      (comment)
 
 
 Debugging

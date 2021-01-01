@@ -55,7 +55,7 @@
 (MAKEF/MAPC*
   (LAMBDA (L FN)
           (SELECTQ (AND (CDR L) (NULL (CDDR L)) (CAR L))
-                                                   (* (MAPC (MAKEF/EVAL (CADR 
+                                                   (-*- (MAPC (MAKEF/EVAL (CADR 
                                                    L)) FN))
                    (MAPC L FN))))
   
@@ -228,7 +228,7 @@
               MAKEF/GETPROPS MAKEF/MAPC* MAKEF/OUT MAKEF/PROPX MAKEF/VARSX 
               MAKEFILE OPEN PP PRETTYPRINT SYSIN SYSOUT))
 (RPAQQ MAKEFCOMS (MAKE FILE PACKAGE MODIFIED BY BLAKE MCBRIDE))
-(RPAQ MAKEFGENNR 8)
+(RPAQ MAKEFGENNR 9)
 (PRINT 'MAKEFVARS)
 [RPAQQ MAKEFVARS
        (CURFILE CURLIBS PRETTYHEADER SYSPROPS (P (RPAQ CURFNS]

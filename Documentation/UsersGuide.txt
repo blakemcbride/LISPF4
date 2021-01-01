@@ -472,8 +472,8 @@ as:
 During pretty-print, lists headed by an atom carrying the function
 definition (FSUBR . QUOTE) will be treated as comments:  They will
 be printed starting from 20 pos. to the left of the right margin.
-Ex.:  By doing (PUTD '* (GETD 'QUOTE)) * behaves as QUOTE and
-expressions like (* comment comment ...) will be printed as comments.
+Ex.:  By doing (PUTD '-*- (GETD 'QUOTE)) -*- behaves as QUOTE and
+expressions like (-*- comment comment ...) will be printed as comments.
 In addition two functions are defined:
  
       (PRINTL s1 s2 ..)

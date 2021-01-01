@@ -2,7 +2,7 @@
 (PRINT 'IO1-PACKAGE)
 (PRINT '(VERSION 2))
 (DEFINEQ
-(*
+(-*-
   (FSUBR . QUOTE))
   
 (COM-READ
@@ -64,11 +64,11 @@
   
 )
 (PRINT 'IO1FNS)
-(RPAQQ IO1FNS                                      (* COM-READ INUNIT OUTUNIT 
+(RPAQQ IO1FNS                                      (-*- COM-READ INUNIT OUTUNIT 
                                                    PRIN1 PRIN2 PRIN2L-SP PRINT 
                                                    PRINTDEF PRINTL PRINTL-SP 
                                                    PRINTLENGTH PRINTLEVEL 
                                                    PRINTPOS READPOS SPACES))
 (RPAQQ IO1COMS IO1-PACKAGE)
-(RPAQ IO1GENNR 2)
+(RPAQ IO1GENNR 3)
 STOP
