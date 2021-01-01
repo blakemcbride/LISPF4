@@ -17,10 +17,10 @@ CFLAGS = -Dstricmp=strcasecmp -O3 $(M32) $(PARMS) -DYEAR=$(LAST_UPDATE_YEAR) -DM
 	f2c -onetrip -A -h $<
 
 
-BASIC.IMG : BARE.IMG script.2
-	./lispf4 BARE.IMG <script.2
+basic.img : bare.img script.2
+	./lispf4 bare.img <script.2
 
-BARE.IMG : lispf4 SYSATOMS script.1
+bare.img : lispf4 SYSATOMS script.1
 	./lispf4 -x <script.1
 
 
@@ -37,4 +37,4 @@ clean:
 	rm -f *~ *.o core *.bak
 
 realclean: clean
-	rm -f lispf4 *.IMG
+	rm -f lispf4 *.img

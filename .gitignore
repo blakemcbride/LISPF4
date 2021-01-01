@@ -2,6 +2,6 @@
 *~
 *.obj
 lispf4
-BARE.IMG
-BASIC.IMG
+bare.img
+basic.img
 

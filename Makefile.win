@@ -20,10 +20,10 @@ FFLAGS =  -onetrip -A -h
 .f.c .PRECIOUS:
 	$(F2C) -onetrip -A -h -E $<
 
-BASIC.IMG : BARE.IMG script.2
-	lispf4 BARE.IMG <script.2
+basic.img : bare.img script.2
+	lispf4 bare.img <script.2
 
-BARE.IMG : lispf4.exe SYSATOMS script.1
+bare.img : lispf4.exe SYSATOMS script.1
 	lispf4 -x <script.1
 
 

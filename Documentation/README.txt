@@ -1,6 +1,6 @@
 
 
-8/23/00 (revised 2/21/15)
+8/23/00 (revised 1/1/2021)
 
 Blake McBride
 blake@mcbride.name
@@ -113,8 +113,8 @@ SYSATOMS file is not needed or used.  Typically, one builds an image
 which contains the common lisp functions and uses that as the base
 system.
 
-The makefile builds two image files.  BARE.IMG contains only SYSATOMS.
-BASIC.IMG contains SYSATOMS and most of the common lisp files.  These
+The makefile builds two image files.  bare.img contains only SYSATOMS.
+basic.img contains SYSATOMS and most of the common lisp files.  These
 common lisp files flesh out the system and would normally be used.
 
 The command line options are as follows:
@@ -134,14 +134,14 @@ For example Lispf4 can be started in the following ways:
 
 This causes a bare system to startup and SYSATOMS will be loaded.
 
-	lispf4  BASIC.IMG
+	lispf4  basic.img
 
-This causes lispf4 to startup and load BASIC.IMG.  SYSATOMS is not used.
+This causes lispf4 to startup and load basic.img.  SYSATOMS is not used.
 
-	lispf4 -c200000  BASIC.IMG
+	lispf4 -c200000  basic.img
 
 This causes lispf4 to set the number of cons cells to 200000 and load
-BASIC.IMG.
+basic.img.
 
 You cannot mix different startup parameters with different image
 files.  In other words, you cannot run the system with one
@@ -153,7 +153,7 @@ started with a different set of parameters.
 ----------------------------------------------------------------------
 
 The raw system is case sensitive and all the built in functions are in
-upper case.  BASIC.IMG has a lisp file loaded which sets an option to
+upper case.  basic.img has a lisp file loaded which sets an option to
 cause lispf4 to up shift all input so the system becomes case
 insensitive.
 
@@ -165,7 +165,7 @@ To exit the system just type:   (EXIT)
 Once the system is built you can save and load images as follows:
 (Note that this will only work if the proper lisp packages which
 perform these operations are loaded.  These files are loaded in
-BASIC.IMG.)
+basic.img.)
 
 (SYSOUT "file.img")
 (SYSIN  "file.img")
