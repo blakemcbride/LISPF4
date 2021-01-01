@@ -4,8 +4,13 @@
 #LIB = \f2c-new\vcf2c.lib
 #INCDIR = \f2c-new
 
-#CFLAGS = -nologo -Zi -Od
-CFLAGS = -nologo -O2
+
+# Set defaults
+PARMS = -DCELLS=100000 -DATOMS=3000 -DSTACK=1500 -DARRAY=5000
+
+
+#CFLAGS = -nologo -Zi -Od $(PARMS)
+CFLAGS = -nologo -O2 $(PARMS)
 FFLAGS =  -onetrip -A -h
 
 .f.c .PRECIOUS:

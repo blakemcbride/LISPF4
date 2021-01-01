@@ -26,6 +26,8 @@ extern int f4_rewind(int lun);
 
 #define SHOWINT(x)	fprintf(stderr, #x " = %d\n", x)
 
+static void usage(char *);
+
 
 //#define FORTRAN_LIB
 
@@ -173,11 +175,11 @@ int	main(int argc, char *argv[])
 /* -- SET UP INTERRUPT HANDLER */
     brset_();
 
-    a_1.nfreet = 100000;
-    a_1.natom = 3000;
-    a_1.nstack = 1500;
-    jaan_1.hill = 1500;
-    a_1.npname = 5000;
+    a_1.nfreet = CELLS;
+    a_1.natom = ATOMS;
+    a_1.nstack = STACK;
+    jaan_1.hill = STACK;
+    a_1.npname = ARRAY;
 #ifndef	FORTRAN_LIB
     while (argc > 1 &&  *argv[1] == '-') {
 	    switch (argv[1][1]) {
@@ -194,6 +196,12 @@ int	main(int argc, char *argv[])
 	    case 'p':  /*  print names / strings / reals  / arrays  */
 		    a_1.npname = atoi(argv[1]+2);
 		    break;
+	    case '-':
+	    case 'h':
+	    case '?':
+	    default:
+		    usage(argv[0]);
+		    return 0;
 	    }
 	    argc--;
 	    argv++;
@@ -5388,3 +5396,16 @@ L10000:
     return 0;
 } /* brset_ */
 
+static void usage(char *cmd) {
+	fprintf(stderr, "Usage:\n");
+	fprintf(stderr, "\t%s  [-cN]  [-aN]  [-sN] [-pN]  [FILE.IMG]\n\n", cmd);
+
+	fprintf(stderr, "\tN = a number (no space between the option and N)\n");
+	fprintf(stderr, "\tc = car/cdr cells (default %d)\n", CELLS);
+	fprintf(stderr, "\ta = atoms (default %d)\n", ATOMS);
+	fprintf(stderr, "\ts = stack space (default %d)\n", STACK);
+	fprintf(stderr, "\tp = print names / strings / reals / arrays (default %d)\n", ARRAY);
+	fprintf(stderr, "\tFILE.IMG = an image file name\n\n");
+	fprintf(stderr, "You'll typically want to start the system with at least the BASIC.IMG image.\n");
+	fprintf(stderr, "Without that, the system is quite bare.\n\n");
+}

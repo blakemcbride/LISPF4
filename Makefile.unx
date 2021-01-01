@@ -3,7 +3,11 @@
 # compile for 32 bit machine (works on 64 bit machines too)
 #M32 = -m32
 
-CFLAGS = -Dstricmp=strcasecmp -O3 $(M32)
+# Set defaults
+PARMS = -DCELLS=100000 -DATOMS=3000 -DSTACK=1500 -DARRAY=5000
+
+
+CFLAGS = -Dstricmp=strcasecmp -O3 $(M32) $(PARMS)
 
 .f.c:
 	f2c -onetrip -A -h $<

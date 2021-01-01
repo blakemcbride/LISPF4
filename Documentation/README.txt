@@ -92,7 +92,9 @@ files only.  The Fortran code is for reference only.
 Building the system
 -------------------
 
-Make lispf4.exe and the two image files by typing:
+To make the lispf4 executable and the two image files by typing:
+
+First, you may want to check the size defaults in the makefile.
 
 Window/MSVC:   nmake -f Makefile.win
 

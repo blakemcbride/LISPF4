@@ -1,4 +1,7 @@
-
 *.o
 *~
 *.obj
+lispf4
+BARE.IMG
+BASIC.IMG
+
