@@ -3,11 +3,15 @@
 # compile for 32 bit machine (works on 64 bit machines too)
 #M32 = -m32
 
+LAST_UPDATE_YEAR = 2021
+LAST_UPDATE_MONTH = 1
+LAST_UPDATE_DAY = 1
+
 # Set defaults
 PARMS = -DCELLS=100000 -DATOMS=3000 -DSTACK=1500 -DARRAY=5000
 
 
-CFLAGS = -Dstricmp=strcasecmp -O3 $(M32) $(PARMS)
+CFLAGS = -Dstricmp=strcasecmp -O3 $(M32) $(PARMS) -DYEAR=$(LAST_UPDATE_YEAR) -DMONTH=$(LAST_UPDATE_MONTH) -DDAY=$(LAST_UPDATE_DAY)
 
 .f.c:
 	f2c -onetrip -A -h $<

@@ -190,9 +190,9 @@ static integer c__40 = 40;
 L10:
     mess_(&c__20);
     b_1.prtpos = 12;
-    i__2 = a_1.numadd + 2015;
-    i__4 = a_1.numadd + 8;
-    i__6 = a_1.numadd + 21;
+    i__2 = a_1.numadd + YEAR;
+    i__4 = a_1.numadd + MONTH;
+    i__6 = a_1.numadd + DAY;
     i__5 = cons_(&i__6, &b_1.nil);
     i__3 = cons_(&i__4, &i__5);
     i__1 = cons_(&i__2, &i__3);
