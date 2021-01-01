@@ -20,7 +20,7 @@ BASIC.IMG : BARE.IMG script.2
 	lispf4 BARE.IMG <script.2
 
 BARE.IMG : lispf4.exe SYSATOMS script.1
-	lispf4 <script.1
+	lispf4 -x <script.1
 
 
 lispf4.exe : lispf41.obj lispf42.obj auxillary.obj

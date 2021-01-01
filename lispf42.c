@@ -180,6 +180,7 @@ int	main(int argc, char *argv[])
     a_1.nstack = STACK;
     jaan_1.hill = STACK;
     a_1.npname = ARRAY;
+    istart = 1;  /*  require image file  */
 #ifndef	FORTRAN_LIB
     while (argc > 1 &&  *argv[1] == '-') {
 	    switch (argv[1][1]) {
@@ -195,6 +196,9 @@ int	main(int argc, char *argv[])
 		    break;
 	    case 'p':  /*  print names / strings / reals  / arrays  */
 		    a_1.npname = atoi(argv[1]+2);
+		    break;
+	    case 'x':
+		    istart = 0; /* no image file but requires SYSATOMS  */
 		    break;
 	    case '-':
 	    case 'h':
@@ -227,7 +231,10 @@ int	main(int argc, char *argv[])
 	    fprintf(stderr, "Out of memory\n");
 	    exit(-1);
     }
-    istart = argc > 1;  /*  0=SYSATOMS,  1=argv[1]  */
+    if (istart && argc <= 1) {
+	    fprintf(stderr, "Image file required. For help:  %s -h\n", argv[0]);
+	    exit(-1);
+    }
 
 
     init1_();
@@ -5398,13 +5405,18 @@ L10000:
 
 static void usage(char *cmd) {
 	fprintf(stderr, "Usage:\n");
-	fprintf(stderr, "\t%s  [-cN]  [-aN]  [-sN] [-pN]  [FILE.IMG]\n\n", cmd);
+	fprintf(stderr, "\t%s  [-h]  [-ZN]...  [-x]  [FILE.IMG]\n\n", cmd);
 
-	fprintf(stderr, "\tN = a number (no space between the option and N)\n");
+	fprintf(stderr, "\tWhere Z is one of:\n\n");
 	fprintf(stderr, "\tc = car/cdr cells (default %d)\n", CELLS);
 	fprintf(stderr, "\ta = atoms (default %d)\n", ATOMS);
 	fprintf(stderr, "\ts = stack space (default %d)\n", STACK);
-	fprintf(stderr, "\tp = print names / strings / reals / arrays (default %d)\n", ARRAY);
+	fprintf(stderr, "\tp = print names / strings / reals / arrays (default %d)\n\n", ARRAY);
+
+	fprintf(stderr, "\tN = a number (no space between the option and N)\n\n");
+	
+	fprintf(stderr, "\t-x = do not load an image, however, require SYSATOMS file\n");
+	fprintf(stderr, "\t-h = display this help message\n");
 	fprintf(stderr, "\tFILE.IMG = an image file name\n\n");
 	fprintf(stderr, "You'll typically want to start the system with at least the BASIC.IMG image.\n");
 	fprintf(stderr, "Without that, the system is quite bare.\n\n");
