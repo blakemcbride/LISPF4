@@ -14,6 +14,8 @@ Interlisp is a dynamically scoped lisp system.  It supports LAMBDA (evaluates fu
 
 The system comes with a pretty complete user manual and implementors manual.  I also include the documentation this system is based on.
 
+Pre-built systems for Linux, Mac, and Windows are also included.
+
 See the Documentation/README.txt file for more complete documentation.
 
 The master copy of this system is located at:  https://github.com/blakemcbride/LISPF4
