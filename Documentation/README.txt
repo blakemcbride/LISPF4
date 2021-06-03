@@ -3,8 +3,8 @@
 8/23/00 (revised 1/1/2021)
 
 Blake McBride
-blake@mcbride.name
-http://blake.mcbride.name
+blake@mcbridemail.com
+https://github.com/blakemcbride/LISPF4
 
 This is an Interlisp interpreter originally written in Fortran but
 converted to C via the F2C Fortran to C converter.  This release has
