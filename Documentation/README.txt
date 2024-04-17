@@ -92,9 +92,18 @@ files only.  The Fortran code is for reference only.
 Building the system
 -------------------
 
-To make the lispf4 executable and the two image files by typing:
+To make the lispf4 executable and the two image files:
 
-First, you may want to check the size defaults in the makefile.
+First, if you like, edit the makefile for your system:
+
+
+Window/MSVC:   Makefile.win
+
+Linux or Mac:  Makefile.unx 
+
+
+
+Second, build the system:
 
 Window/MSVC:   nmake -f Makefile.win
 
@@ -104,14 +113,27 @@ Linux or Mac:   make -f Makefile.unx
 Running the system
 ------------------
 
+To run the system, you only need two files: lisp, basic.img.
+The system can be reun as follows:
+
+./lispf4 basic.img             Linux or Mac
+
+lispf4 basic.img               Windows
+
+
 In addition to loading lisp source files, lispf4 has the ability to
 save/load binary images of a running system.  This enables you to load
-an entire pre-loaded image in a short time.  Initially, if no image
-file is being loaded, the system requires the SYSATOMS file in order
-to build its internal system.  If an image file is being loaded the
-SYSATOMS file is not needed or used.  Typically, one builds an image
-which contains the common lisp functions and uses that as the base
-system.
+an entire pre-loaded image in a short time.  
+
+
+Additional Details
+------------------
+
+Initially, if no image file is being loaded, the system requires the
+SYSATOMS file in order to build its internal system.  If an image file
+is being loaded the SYSATOMS file is not needed or used.  Typically,
+one builds an image which contains the common lisp functions and uses
+that as the base system.
 
 The makefile builds two image files.  bare.img contains only SYSATOMS.
 basic.img contains SYSATOMS and most of the common lisp files.  These
@@ -126,28 +148,30 @@ The command line options are as follows:
 	a = atoms (default 3000)
 	s = stack space (default 1500)
 	p = print names / strings / reals / arrays (default 5000)
+	x = no image file (used for system generation)
 	FILE.IMG = an image file name
 
 For example Lispf4 can be started in the following ways:
 
-	lispf4
-
-This causes a bare system to startup and SYSATOMS will be loaded.
-
 	lispf4  basic.img
 
-This causes lispf4 to startup and load basic.img.  SYSATOMS is not used.
-
-	lispf4 -c200000  basic.img
-
-This causes lispf4 to set the number of cons cells to 200000 and load
-basic.img.
+This causes lispf4 to startup and load basic.img - the basic image.
+It includes the basic system plus the InterLisp extensions that make
+the system a usable system.  (SYSATOMS is not used.)
 
 You cannot mix different startup parameters with different image
-files.  In other words, you cannot run the system with one
+files.  In other words, you cannot build the system with one
 configuration, save an image, and then load it with a lispf4 which was
-started with a different set of parameters.
+started with a different set of parameters. If you want to change the
+memory configuration, change the makefile and rebuild the system with
+that configuration.
 
+	lispf4 -x
+
+This causes a bare system to startup.  It uses SYSATOMS.  This is
+mainly used to generate the system.  You'll not likely want to do this
+because the system is too raw for most purposes.  It's mainly used to
+generate the initial images.
 
 
 ----------------------------------------------------------------------
