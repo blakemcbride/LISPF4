@@ -36,49 +36,52 @@
                   (COND (PRINTFLG (PRINT (EVALA X AL)) (GO LOOP))
                         (T (EVALA X AL) (GO LOOP])
   
-(MAKEF/EVAL
+(MAKEF-EVAL
   (LAMBDA (X) (CAR (APPLYSTK 'ERRORSET (LIST X) AL))))
   
-(MAKEF/FNSX
-  (LAMBDA (L) (PRINTL "(DEFINEQ") (PRETTYPRINT L OPT) (PRINTL ")")))
+(MAKEF-FNSX
+ (LAMBDA (L) 
+   (PRINTL "(DEFINEQ") 
+   (PRETTYPRINT L OPT) 
+   (PRINTL ")")))
   
-(MAKEF/GETPROPS
+(MAKEF-GETPROPS
   [LAMBDA (L)
           (COND ((NLISTP L) NIL)
                 ((MEMB (CAR L) SYSPROPS)
-                  (MAKEF/GETPROPS (CDDR L)))
+                  (MAKEF-GETPROPS (CDDR L)))
                 [(OR NIL* (CADR L))
                   (CONS (CAR L)
-                        (CONS (CADR L) (MAKEF/GETPROPS (CDDR L]
-                (T (MAKEF/GETPROPS (CDDR L])
+                        (CONS (CADR L) (MAKEF-GETPROPS (CDDR L]
+                (T (MAKEF-GETPROPS (CDDR L])
   
-(MAKEF/MAPC*
+(MAKEF-MAPC*
   (LAMBDA (L FN)
           (SELECTQ (AND (CDR L) (NULL (CDDR L)) (CAR L))
-                                                   (-*- (MAPC (MAKEF/EVAL (CADR 
+                                                   (-*- (MAPC (MAKEF-EVAL (CADR 
                                                    L)) FN))
                    (MAPC L FN))))
   
-(MAKEF/OUT
+(MAKEF-OUT
   (NLAMBDA LL
            (PRIN0 (CONS (CAR LL) (EVLIS (CDR LL))) T OPT)
            (TERPRI)))
   
-(MAKEF/PROPX
+(MAKEF-PROPX
   [LAMBDA (PROPS L NIL*)
           (COND [(EQ PROPS 'ALL)
-                  (MAKEF/MAPC* L
+                  (MAKEF-MAPC* L
                     '(LAMBDA (X)
                              [SETQ X
-                                   (CONS X (MAKEF/GETPROPS (CDR X]
+                                   (CONS X (MAKEF-GETPROPS (CDR X]
                              (COND ((CDR X)
                                      (PRIN0 (CONS 'PUTPROPS X) T OPT)
                                      (TERPRI]
-                ((ATOM PROPS) (MAKEF/PROPX (LIST PROPS) L NIL*))
+                ((ATOM PROPS) (MAKEF-PROPX (LIST PROPS) L NIL*))
                 (T (MAPC PROPS
                          '(LAMBDA
                             (P RES)
-                            [MAKEF/MAPC* L
+                            [MAKEF-MAPC* L
                               '(LAMBDA
                                  (X)
                                  (AND (OR NIL* (GETPROP X P))
@@ -87,14 +90,14 @@
                                               (LIST X (GETPROP X P))
                                               RES]
                             (AND RES
-                                 (MAKEF/OUT DEFLIST
+                                 (MAKEF-OUT DEFLIST
                                    (LIST 'QUOTE (REVERSE RES))
                                    (LIST 'QUOTE P])
   
-(MAKEF/VARSX
+(MAKEF-VARSX
   [LAMBDA (L)
-          (MAKEF/MAPC* L
-            '(LAMBDA (X) (MAKEF/OUT RPAQQ X (MAKEF/EVAL X])
+          (MAKEF-MAPC* L
+            '(LAMBDA (X) (MAKEF-OUT RPAQQ X (MAKEF-EVAL X])
   
 (MAKEFILE
   (LAMBDA (FILE XFILE OPT)
@@ -125,46 +128,47 @@
                 (SETQ GBC (SYSFLAG 1 NIL))
                 (SETQ DEPTH (PRINTLEVEL 150))
                 (SETQ LENGTH (PRINTLENGTH 1000))
-                (MAKEF/OUT FILEHEADER FILE)
-                (MAKEF/OUT PRINT (LIST 'QUOTE COMSV))
-                (MAKEF/OUT PRINT (SUBST GENV '&&X ''(VERSION &&X)))
+                (MAKEF-OUT FILEHEADER FILE)
+                (MAKEF-OUT PRINT (LIST 'QUOTE COMSV))
+                (MAKEF-OUT PRINT (SUBST GENV '&&X ''(VERSION &&X)))
                 (COND (FNSV (SETQ FNSV (DSORT (COPY FNSV)))
-                            (MAKEF/FNSX (LIST '* (LIST 'QUOTE FNSV)))
-                            (MAKEF/OUT PRINT (LIST 'QUOTE FNS))
-                            (MAKEF/OUT RPAQQ FNS FNSV)))
-                (MAKEF/OUT RPAQQ COMS COMSV)
-                (MAKEF/OUT RPAQ GEN GENV)
+                            (MAKEF-FNSX FNSV)
+                            (MAKEF-OUT PRINT (LIST 'QUOTE FNS))
+                            (MAKEF-OUT RPAQQ FNS FNSV)))
+                (MAKEF-OUT RPAQQ COMS COMSV)
+                (MAKEF-OUT RPAQ GEN GENV)
                 [COND (VARSV (SETQ VARSV (DSORT (COPY VARSV)))
-                             (MAKEF/OUT PRINT (LIST 'QUOTE VARS))
-                             (MAKEF/OUT RPAQQ VARS VARSV)
+                             (MAKEF-OUT PRINT (LIST 'QUOTE VARS))
+                             (MAKEF-OUT RPAQQ VARS VARSV)
                              (MAPC VARSV
                                    '(LAMBDA
                                       (X)
                                       (COND ((LITATOM X)
-                                              (MAKEF/VARSX (LIST X)))
+                                              (MAKEF-VARSX (LIST X)))
                                             ((LISTP X)
                                               (SELECTQ
                                                 (CAR X)
-                                                (FNS (MAKEF/FNSX
+                                                (FNS 
+						 (MAKEF-FNSX
                                                        (CDR X)))
                                                 (VARS
-                                                  (MAKEF/VARSX (CDR X)))
+                                                  (MAKEF-VARSX (CDR X)))
                                                 (PROP
-                                                  (MAKEF/PROPX
+                                                  (MAKEF-PROPX
                                                     (CADR X)
                                                     (CDDR X)
                                                     T))
                                                 (IFPROP
-                                                  (MAKEF/PROPX
+                                                  (MAKEF-PROPX
                                                     (CADR X)
                                                     (CDDR X)))
-                                                (P (MAKEF/MAPC*
+                                                (P (MAKEF-MAPC*
                                                      (CDR X)
                                                      'PRINT))
                                                 (E (OUTUNIT UNIT)
-                                                   (MAKEF/MAPC*
+                                                   (MAKEF-MAPC*
                                                      (CDR X)
-                                                     'MAKEF/EVAL)
+                                                     'MAKEF-EVAL)
                                                    (OUTUNIT FILENR))
                                                 (PROG1
                                                   (OUTUNIT UNIT)
@@ -192,7 +196,7 @@
 (PRETTYPRINT
   (LAMBDA (L OPT POS)
           [SETQ POS (IOTAB 7 (PLUS 2 (IOTAB 7]
-          (MAKEF/MAPC* L
+          (MAKEF-MAPC* L
             '(LAMBDA (X)
                      (PRIN1 "(")
                      (PRINT X)
@@ -224,8 +228,8 @@
 )
 (PRINT 'MAKEFFNS)
 (RPAQQ MAKEFFNS
-       (CLOSE CURFILE FILECREATED FILEHEADER LOAD MAKEF/EVAL MAKEF/FNSX 
-              MAKEF/GETPROPS MAKEF/MAPC* MAKEF/OUT MAKEF/PROPX MAKEF/VARSX 
+       (CLOSE CURFILE FILECREATED FILEHEADER LOAD MAKEF-EVAL MAKEF-FNSX 
+              MAKEF-GETPROPS MAKEF-MAPC* MAKEF-OUT MAKEF-PROPX MAKEF-VARSX 
               MAKEFILE OPEN PP PRETTYPRINT SYSIN SYSOUT))
 (RPAQQ MAKEFCOMS (MAKE FILE PACKAGE MODIFIED BY BLAKE MCBRIDE))
 (RPAQ MAKEFGENNR 9)

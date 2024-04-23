@@ -10,8 +10,10 @@ LAST_UPDATE_DAY = 1
 # Set defaults
 PARMS = -DCELLS=100000 -DATOMS=3000 -DSTACK=1500 -DARRAY=5000
 
+OPT = -O3
+#OPT = -g -Og
 
-CFLAGS = -Dstricmp=strcasecmp -O3 $(M32) $(PARMS) -DYEAR=$(LAST_UPDATE_YEAR) -DMONTH=$(LAST_UPDATE_MONTH) -DDAY=$(LAST_UPDATE_DAY)
+CFLAGS = -Dstricmp=strcasecmp $(OPT) $(M32) $(PARMS) -DYEAR=$(LAST_UPDATE_YEAR) -DMONTH=$(LAST_UPDATE_MONTH) -DDAY=$(LAST_UPDATE_DAY)
 
 .f.c:
 	f2c -onetrip -A -h $<
@@ -25,7 +27,7 @@ bare.img : lispf4 SYSATOMS script.1
 
 
 lispf4 : lispf41.o lispf42.o auxillary.o
-	gcc -o $@ $(M32) -O $^ -lm
+	gcc -o $@ $(M32) $(OPT) $^ -lm
 
 #lispf41.c : lispf41.f
 #	f2c -onetrip -A -h $<
