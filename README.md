@@ -16,7 +16,7 @@ The system comes with a pretty complete user manual and implementors manual.  I 
 
 Pre-built systems for Linux, Mac, and Windows are also included.
 
-See the Documentation/README.txt file for more complete documentation.
+See the [Documentation/README.txt](https://github.com/blakemcbride/LISPF4/blob/master/Documentation/README.txt) file for more complete documentation.
 
 Source code located at:  [https://github.com/blakemcbride/LISPF4](https://github.com/blakemcbride/LISPF4)
 
