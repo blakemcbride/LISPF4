@@ -18,7 +18,7 @@ Pre-built systems for Linux, Mac, and Windows are also included.
 
 See the Documentation/README.txt file for more complete documentation.
 
-The master copy of this system is located at:  https://github.com/blakemcbride/LISPF4
+Source code located at:  [https://github.com/blakemcbride/LISPF4](https://github.com/blakemcbride/LISPF4)
 
 Enjoy.
 
