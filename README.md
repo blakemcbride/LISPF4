@@ -2,7 +2,7 @@
 LISPF4 - InterLisp Interpreter
 =======================
 
-**NOTE: The original LISPF4 written in FORTRAN IV (included herein as lispf4.orig) always worked flawlessly.  I converted it to 32-bit C via the FORTRAN to C converter.  I think it worked, but didn't use it a lot.
+**NOTE: The original LISPF4, written in FORTRAN IV (included herein as lispf4.orig), always worked flawlessly.  I converted it to 32-bit C via the FORTRAN to C converter.  I think it worked, but didn't use it a lot.
 I later made a few adjustments for 64 bits.  At first, I thought it worked, but I now realize it does not.  This is going to take some effort to debug.  I just do not have the time right now.  If someone were to,
 I might suggest starting back with the original known-working FORTRAN source.**
 
