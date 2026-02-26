@@ -184,17 +184,41 @@ int	main(int argc, char *argv[])
     while (argc > 1 &&  *argv[1] == '-') {
 	    switch (argv[1][1]) {
 	    case 'c':  /*  car/cdr cells  */
-		    a_1.nfreet = atoi(argv[1]+2);
+		    if (argv[1][2])
+			    a_1.nfreet = atoi(argv[1]+2);
+		    else if (argc > 2) {
+			    argc--;
+			    argv++;
+			    a_1.nfreet = atoi(argv[1]);
+		    }
 		    break;
 	    case 'a':  /*  atoms  */
-		    a_1.natom = atoi(argv[1]+2);
+		    if (argv[1][2])
+			    a_1.natom = atoi(argv[1]+2);
+		    else if (argc > 2) {
+			    argc--;
+			    argv++;
+			    a_1.natom = atoi(argv[1]);
+		    }
 		    break;
 	    case 's':  /*  stack space  */
-		    a_1.nstack = atoi(argv[1]+2);
+		    if (argv[1][2]) {
+			    a_1.nstack = atoi(argv[1]+2);
+		    } else if (argc > 2) {
+			    argc--;
+			    argv++;
+			    a_1.nstack = atoi(argv[1]);
+		    }
 		    jaan_1.hill = a_1.nstack;
 		    break;
 	    case 'p':  /*  print names / strings / reals  / arrays  */
-		    a_1.npname = atoi(argv[1]+2);
+		    if (argv[1][2])
+			    a_1.npname = atoi(argv[1]+2);
+		    else if (argc > 2) {
+			    argc--;
+			    argv++;
+			    a_1.npname = atoi(argv[1]);
+		    }
 		    break;
 	    case 'x':
 		    istart = 0; /* no image file but requires SYSATOMS  */
@@ -219,7 +243,7 @@ int	main(int argc, char *argv[])
     jaan_1.jill = (integer *) calloc(jaan_1.hill, sizeof(integer));
     jaan_1.jack = (integer *) calloc(jaan_1.hill, sizeof(integer));
     b_1.pname = (real *) calloc(a_1.npname+2, sizeof(real));
-    if (!carcdr_1.cdr  ||
+    if (!carcdr_1.car  ||
 	!carcdr_1.cdr  ||
 	!b_1.pnp       ||
 	!b_1.htab      ||
