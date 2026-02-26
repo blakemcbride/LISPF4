@@ -113,6 +113,7 @@ static integer c__15 = 15;
 static real c_b239 = 1.f;
 static integer c__4 = 4;
 static integer c__24 = 24;
+static integer c__32 = 32;
 static integer c__36 = 36;
 static integer c__39 = 39;
 static integer c__30 = 30;
@@ -3152,8 +3153,8 @@ L6000:
     /* Local variables */
     static integer ieof, j;
     extern integer matom_(integer *), getcht_(integer *);
-    extern /* Subroutine */ int rew_(integer *), rda1_(integer *, integer *, 
-	    integer *, integer *, integer *);
+    extern /* Subroutine */ int rew_(integer *), rda1_(integer *, integer *,
+	    integer *, integer *, integer *), mess_(integer *), lspex_(void);
 
 /* OMMON AND INTEGER DECLARATIONS */
 /* OMMON AND INTEGER DECLARATIONS END */
@@ -3236,13 +3237,12 @@ L1200:
     b_1.cht = 0;
     return 0;
 /*                                      E-O-FILE */
-/* *** CHANGED BY TR */
 L1300:
     if (b_1.lunin != b_1.lunins) {
 	goto L1350;
     }
-/*        CALL MESS(32) */
-/*        CALL LSPEX */
+    mess_(&c__32);
+    lspex_();
 /*                                      ... BUT NOT ON LUNINS */
 /*                                       SWITCH BACK TO LUNINS */
 L1350:
