@@ -41,8 +41,7 @@ lispf4.exe : lispf41.obj lispf42.obj auxillary.obj
 #lispf41.obj : lispf41.c
 
 clean:
-	rm -zfq *~ *.o core *.obj *.bak
-	rm -zfq *.pdb *.ilk *.opt
+	del /q /f *.o *.obj *.bak *.pdb *.ilk *.opt 2>nul
 
 realclean: clean
-	rm -zfq lispf4.exe *.img
+	del /q /f lispf4.exe *.img 2>nul
