@@ -8,9 +8,8 @@
 #include <string.h>
 #include <time.h>
 #include <signal.h>
+#include <math.h>
 #include "f2c.h"
-
-double	pow(), fmod();
 
 extern time_t start_time;
 
@@ -1069,7 +1068,7 @@ L9000:
     real r__1;
 
     /* Builtin functions */
-    double r_lg10(real *), pow(), log10();
+    double r_lg10(real *);
     integer pow_ii(integer *, integer *);
 
     /* Local variables */
@@ -1613,12 +1612,12 @@ L91:
 /* *SETC*      IF(CAR(I).GT.MIN.AND.CAR(I).LE.MAX) CALL SETCAR(I,CAR(I)+DIFF) */
 	    if (carcdr_1.car[i__ - 1] > *min__ && carcdr_1.car[i__ - 1] <= *
 		    max__) {
-		carcdr_1.car[i__ - 1] = carcdr_1.car[i__ + *diff - 1];
+		carcdr_1.car[i__ - 1] += *diff;
 	    }
 /* *SETC*      IF(CDR(I).GT.MIN.AND.CDR(I).LE.MAX) CALL SETCDR(I,CDR(I)+DIFF) */
 	    if (carcdr_1.cdr[i__ - 1] > *min__ && carcdr_1.cdr[i__ - 1] <= *
 		    max__) {
-		carcdr_1.cdr[i__ - 1] = carcdr_1.cdr[i__ + *diff - 1];
+		carcdr_1.cdr[i__ - 1] += *diff;
 	    }
 /* L10: */
 	}

@@ -128,7 +128,7 @@ static integer c__40 = 40;
 #define n ((integer *)equiv_2)
     extern integer iread_(integer *);
     static real r__, s;
-    extern /* Subroutine */ int getch_();
+    extern int getch_(void *, void *, int *, ...);
     extern integer xcall_(integer *, integer *), openf_(integer *), subpr_(
 	    integer *, integer *, integer *), equal_(integer *, integer *), 
 	    getpn_(integer *, integer *, integer *, integer *), ratom_(

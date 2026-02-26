@@ -2,10 +2,6 @@
 LISPF4 - InterLisp Interpreter
 =======================
 
-**NOTE: The original LISPF4, written in FORTRAN IV (included herein as lispf4.orig), always worked flawlessly.  I converted it to 32-bit C via the FORTRAN to C converter.  I think it worked, but didn't use it a lot.
-I later made a few adjustments for 64 bits.  At first, I thought it worked, but I now realize it does not.  This is going to take some effort to debug.  I just do not have the time right now.  If someone were to,
-I might suggest starting back with the original known-working FORTRAN source.**
-
 LISPF4 is an InterLisp interpreter written by Mats Nordstrom from Uppsala, Sweden, in the early '80s.  It was written in FORTRAN and found by me, over the course of a few years of use, to be quite stable.  I subsequently used the F2C program to convert it to C.  I then gave it the ability to have command-line determination of the memory size.  I have much less experience with the C port in terms of reliability.
 
 The original FORTRAN code required a small assembler piece to provide byte indexing into integers.  This small piece caused no end of trouble when porting to a new compiler.  Since C can do this without assembler, this problem has hopefully been eliminated.
