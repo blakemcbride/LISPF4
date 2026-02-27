@@ -106,14 +106,18 @@ Build chain:
 ## Command-Line Options
 
 ```
-lispf4 [-cN] [-aN] [-sN] [-pN] [-x] [FILE.IMG]
+lispf4 [-c N] [-a N] [-s N] [-p N] [-x] [FILE.IMG]
 
--cN    CAR/CDR cells (default 100000)
--aN    Atoms (default 3000)
--sN    Stack space (default 1500)
--pN    Print names/strings/reals/arrays (default 5000)
+-c N   CAR/CDR cells (default 100000)
+-a N   Atoms (default 3000)
+-s N   Stack space (default 1500)
+-p N   Print names/strings/reals/arrays (default 5000)
 -x     No image file (reads SYSATOMS for system generation)
 ```
+
+The numeric argument can be attached (`-c200000`) or separated by a space (`-c 200000`).
+
+The `LAST_UPDATE_YEAR`, `LAST_UPDATE_MONTH`, and `LAST_UPDATE_DAY` variables in the Makefiles control the date shown in the startup message "Lisp F4, latest update = ..." They are passed to the compiler as `-DYEAR=`, `-DMONTH=`, `-DDAY=`.
 
 ---
 
@@ -215,7 +219,21 @@ Read by `init2_()` during bare system startup. Contains 7 groups of built-in fun
 6. **SUBRN** (n args): CONCAT, LIST, PLUS, TIMES, SYSFLAG
 7. **FSUBR** (special forms): AND, COND, GO, OR, PROG, PROGN, QUOTE, SELECTQ, SETQ, etc.
 
-Then 22 individual atoms (A000, APPLY, EVAL, FNCELL, LAMBDA, NLAMBDA, NOBIND, T, etc.) and ~40 error/status messages.
+Then 22 individual atoms (A000, APPLY, EVAL, FNCELL, LAMBDA, NLAMBDA, NOBIND, T, etc.) and 40 error/status messages. Key messages by number:
+
+| # | Message |
+|---|---------|
+| 1 | --- Unbound variable |
+| 3 | --- Compacting GBC. Free cells = |
+| 4 | Exit from Lisp F4 |
+| 17 | --- Reset |
+| 20 | Lisp F4 , latest update = |
+| 26 | --- Keyboard interrupt |
+| 27 | --- User break |
+| 30 | Bye |
+| 32 | --- EOF read from standard input |
+| 35 | --- GBC. Free cells = |
+| 39 | GBC:s (cell compacting num num/atom) = |
 
 ### Image Files (ROLLIN/ROLLOUT)
 
@@ -249,49 +267,6 @@ Mark-and-sweep with compaction:
 
 ---
 
-## Bugs Found and Fixed
-
-### 1. Pointer Relocation Bug in `move_()` (lispf42.c:1615-1620)
-
-**The bug**: When loading an image file with different memory parameters than it was saved with, the `move_()` function was supposed to add a relocation offset (`diff`) to pointer values in the CAR and CDR arrays. Instead, it was copying values from a shifted array position.
-
-**Wrong code** (original F2C translation):
-```c
-carcdr_1.car[i__ - 1] = carcdr_1.car[i__ + *diff - 1];  // reads from wrong position
-carcdr_1.cdr[i__ - 1] = carcdr_1.cdr[i__ + *diff - 1];  // reads from wrong position
-```
-
-**Correct code**:
-```c
-carcdr_1.car[i__ - 1] += *diff;  // adds offset to the value
-carcdr_1.cdr[i__ - 1] += *diff;  // adds offset to the value
-```
-
-**Root cause**: This was a latent bug in the original FORTRAN source (`CAR(I)=CAR(I+DIFF)` instead of `CAR(I)=CAR(I)+DIFF`). It was never triggered in FORTRAN because the array sizes were hardcoded constants, so `DIFF` was always 0 and `move_()` was never called. When the C version made memory sizes configurable via command-line arguments, loading images with different parameters caused `DIFF` to be non-zero, exposing the bug.
-
-**Symptoms**: Loading `basic.img` with `-c200000` (instead of default `-c100000`) caused `(GETD 'DE)` to return NIL (function definitions lost). With `-c100001`, it returned garbled data (`FNCELL`).
-
-**Note**: The `args` array relocation on the same function (line 1631) already had the correct `+= *diff` pattern.
-
-### 2. Compilation Warning: Duplicate NULL Check in `main()`
-
-In the memory allocation NULL check (lispf42.c:222-223):
-```c
-if (!carcdr_1.cdr  ||     // checks cdr
-    !carcdr_1.cdr  ||     // should check car
-```
-The first check should be `!carcdr_1.car`.
-
-### 3. EOF Infinite Loop (pre-existing in FORTRAN)
-
-When stdin reaches EOF, the interpreter enters an infinite loop printing the prompt character (underscore). The original FORTRAN had exit code (`MESS(32)` / `LSPEX`) that was commented out by Tore Risch ("TR"). This is not a bug introduced by the C conversion.
-
-### 4. K&R Function Declarations (compilation issue on modern GCC)
-
-The old-style declarations `double pow(), fmod();` and `double pow(), log10();` conflict with modern GCC which has built-in knowledge of these math functions. Fixed by adding `#include <math.h>` and removing the K&R declarations.
-
----
-
 ## Key Function Reference
 
 | Function | File:Line | Description |
@@ -304,7 +279,10 @@ The old-style declarations `double pow(), fmod();` and `double pow(), log10();` 
 | `rollou_()` | lispf42.c:1536 | Save binary image file |
 | `move_()` | lispf42.c:1592 | Relocate pointers when loading images with different parameters |
 | `garb_()` | lispf42.c:3256 | Garbage collector (mark-and-sweep with compaction) |
-| `shift_()` | lispf42.c:3124 | Character input reader / tokenizer |
+| `shift_()` | lispf42.c:3147 | Character input reader / tokenizer (contains EOF handling at L1300) |
+| `lspex_()` | lispf42.c:4557 | Clean exit routine (prints GC stats, calls `exit(0)`) |
+| `mess_()` | lispf42.c:4603 | Print system message by number (messages defined in SYSATOMS) |
+| `rda1_()` | lispf42.c:4902 | Low-level line reader; sets `ieof=2` on end-of-file |
 | `matom_()` | lispf42.c:4144 | Atom creation |
 | `getcht_()` | lispf42.c:~4445 | Query character type table |
 | `setcht_()` | lispf42.c:~4470 | Set character type table entry |
@@ -313,6 +291,67 @@ The old-style declarations `double pow(), fmod();` and `double pow(), log10();` 
 | `f4_open()` | auxillary.c:41 | Open file on logical unit |
 | `f4_read()` | auxillary.c:83 | Read formatted (text) data |
 | `f4_readu()` | auxillary.c:102 | Read unformatted (binary) data |
+
+---
+
+## Lisp Package Evolution (lispf4.orig vs current .lisp files)
+
+The current .lisp files have been significantly enhanced from the originals in lispf4.orig. All current files are internally consistent (every function in RPAQQ pkgFNS has a matching DEFINEQ definition). Key changes:
+
+| Package | Renames | Added Functions | Removed Functions |
+|---------|---------|-----------------|-------------------|
+| basic2 | `SORT` -> `DSORT` | 64 functions (arithmetic ops, property lists, etc.) | `ARRAY` (was built-in SUBR listed in error) |
+| io1 | `*` -> `-*-` | — | — |
+| func1 | — | `DEFINE`, `DEFUN`, `DM` | — |
+| debug1 | — | `ERSETQ`, `HELP`, `NLSETQ` | — |
+| debug2 | `ADVICE-BODY` -> `ADVISE-BODY` | — | — |
+| edit | `EDITS` -> `EDITS-INT` (refactored) | `EDITF` rewritten with save/stop/ok, `EDITP`, `EDITS` wrapper added back | Original `EDITF`/`EDITP` replaced |
+| makef | `FILELST` -> `CURLIBS` | `FILECREATED`, `SYSIN`, `SYSOUT` | `OPENF`, `SOPENF`, `LOPENF`, `CLOSE-1`, `ROLLIN`, `ROLLOUT` (replaced by XCALL-based approach) |
+| history | — | Entirely new package (LISPX, READ, REDO, ??, HIST, HFIX) | — |
+
+The file `editv.lisp` is an experimental file and should be ignored.
+
+### Git History for edit.lisp
+
+```
+f6e7533  Renamed .l file to .lisp
+0281992  Enhanced EDITOR to allow saving and aborting edits
+1b290ce  Changes super-parenthesis from <> to the InterLisp standard []
+d1405fa  Initial commit
+```
+
+---
+
+## I/O Architecture
+
+### Logical Units
+
+The interpreter uses FORTRAN-style logical unit numbers for I/O:
+
+| Unit | Purpose | C mapping |
+|------|---------|-----------|
+| 5 (`LUNIN`/`LUNINS`) | Standard input | `stdin` |
+| 6 (`LUNUT`/`LUNUTS`) | Standard output | `stdout` |
+| 4 (`LUNSYS`) | SYSATOMS file (only during init) | opened/closed by `init2_()` |
+| 10-30 | User files | opened via `(XCALL 1 ...)` / `(OPEN ...)` |
+
+`Logical_units[100]` array in auxillary.c maps unit numbers to `FILE*` pointers. Units 5 and 6 are set up by `setup()`.
+
+### Read Path
+
+1. `shift_()` is the character-level reader/tokenizer
+2. It calls `rda1_()` at label L1200 to read a new line from `LUNIN`
+3. `rda1_()` calls `f4_read()` in auxillary.c for each character
+4. `f4_read()` calls `read1()` which calls `getc()` on the FILE* for the logical unit
+5. `read1()` tracks `read_status`: 1=reading, 2=at EOL, 3=at EOF
+6. On EOF, `rda1_()` sets `ieof=2`, which `shift_()` detects at L1300
+
+### IOTAB
+
+`(IOTAB unit-type unit-number)` redirects input/output:
+- `(IOTAB 1 N)` - set input unit to N
+- `(IOTAB 2 N)` - set output unit to N (etc.)
+This is how `script.2` reads Lisp files: opens a file on a unit, redirects input to it via IOTAB.
 
 ---
 
