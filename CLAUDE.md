@@ -11,10 +11,11 @@ LISPF4 is an InterLisp interpreter written by Mats Nordstrom (Uppsala, 1980-83) 
 ## Build
 
 ```bash
-make -f Makefile.unx            # Linux/Mac: lispf4, then bare.img, then basic.img
-nmake -f Makefile.win           # Windows/MSVC
-make -f Makefile.unx clean      # *.o, *~, core, *.bak
-make -f Makefile.unx realclean  # also lispf4 and *.img
+make                   # Linux/Mac: lispf4, then bare.img, then basic.img
+nmake -f Makefile.win  # Windows/MSVC
+make clean             # *.o, *~, core, *.bak
+make realclean         # also lispf4 and *.img
+make test              # regression suite (tests/)
 ```
 
 The build is a three-stage bootstrap, and each stage depends on the previous:
@@ -26,7 +27,7 @@ The build is a three-stage bootstrap, and each stage depends on the previous:
 **Gotcha:** `basic.img` depends only on `bare.img` and `script.2` in the Makefile — *not* on the `.lisp` files. After editing any `.lisp` file you must force the rebuild:
 
 ```bash
-rm -f basic.img && make -f Makefile.unx
+rm -f basic.img && make
 ```
 
 Memory defaults are compile-time (`PARMS` in the Makefiles): `CELLS=100000` (cons cells), `ATOMS=3000`, `STACK=1500`, `ARRAY=5000` (print names/strings/reals/arrays). `LAST_UPDATE_{YEAR,MONTH,DAY}` in the Makefiles feed the `-DYEAR/-DMONTH/-DDAY` startup banner — bump them when releasing.
@@ -82,7 +83,7 @@ F2C-derived idioms you must preserve when editing:
 
 Not in `basic.img`, loadable on demand: `ifdo.lisp` (IF/DO WHILE/FOR, needs `match.lisp`), `match.lisp`, `struct.lisp`, `astruct.lisp`, `prolog.lisp`, `quote.lisp`, `static.lisp`, `printa.lisp`, `schum.lisp`.
 
-`SYSATOMS` defines the builtin function tables read by `init2_()` during bare startup: seven SUBR groups (SUBR0, SUBR1, SUBR11, SUBR2, SUBR3, SUBRN, FSUBR), then individual atoms, then the numbered system messages. Atoms are created in file order, and the eval loop dispatches builtins by comparing an atom's index against the group boundary registers — so **adding or reordering entries shifts every subsequent builtin's dispatch group**. `SYSATOMS` is read only during `-x` startup; existing images carry their own atom table and will not pick up the change. Regenerate from the bottom: `make -f Makefile.unx realclean && make -f Makefile.unx`.
+`SYSATOMS` defines the builtin function tables read by `init2_()` during bare startup: seven SUBR groups (SUBR0, SUBR1, SUBR11, SUBR2, SUBR3, SUBRN, FSUBR), then individual atoms, then the numbered system messages. Atoms are created in file order, and the eval loop dispatches builtins by comparing an atom's index against the group boundary registers — so **adding or reordering entries shifts every subsequent builtin's dispatch group**. `SYSATOMS` is read only during `-x` startup; existing images carry their own atom table and will not pick up the change. Regenerate from the bottom: `make realclean && make`.
 
 Super-parenthesis is `]` (closes back to the matching `[`), changed from the original `<>` to match InterLisp.
 

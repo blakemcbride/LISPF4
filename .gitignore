@@ -2,7 +2,9 @@
 *~
 *.obj
 /lispf4
+/lispf4dbg
 /lispf4.exe
 bare.img
 /basic.img
+/tests/.work/
 

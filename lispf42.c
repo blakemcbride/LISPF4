@@ -11,21 +11,36 @@
 #include <math.h>
 #include "f2c.h"
 
+#include "lispf4.h"
+
 extern time_t start_time;
 
-extern int f4_open(int lun, char *file, char *mode);
-extern int f4_close(int lun);
-extern void setup(void);
-extern int f4_readu(int lun, char *v, int n);
-extern void f4_start_read(void);
-extern int f4_read(int lun, char *v, int n);
-extern int f4_write(int lun, char *v, int n);
-extern int f4_write_lf(int lun);
-extern int f4_rewind(int lun);
+/*  Set by the SIGINT handler; polled by the interpreter.  */
+volatile sig_atomic_t f4_break_pending = 0;
 
 #define SHOWINT(x)	fprintf(stderr, #x " = %d\n", x)
 
 static void usage(char *);
+
+/*  Parse a numeric command-line size.  Rejects junk, zero, negatives and
+    values large enough to overflow the derived quantities in INIT1.  */
+
+static integer parse_size(const char *opt, const char *s)
+{
+	char	*end;
+	long	v;
+
+	if (!s  ||  !*s) {
+		fprintf(stderr, "Option -%s requires a number.\n", opt);
+		exit(1);
+	}
+	v = strtol(s, &end, 10);
+	if (end == s  ||  *end != '\0'  ||  v <= 0  ||  v > 200000000L) {
+		fprintf(stderr, "Invalid value '%s' for option -%s.\n", s, opt);
+		exit(1);
+	}
+	return (integer) v;
+}
 
 
 //#define FORTRAN_LIB
@@ -171,6 +186,8 @@ int	main(int argc, char *argv[])
 	    lspex_(void), lispf4_(integer *);
     extern integer rollin_(integer *);
 
+    char *progname = argv[0];	/*  argv walks forward below  */
+
     start_time = time(NULL);
 /* -- SET UP INTERRUPT HANDLER */
     brset_();
@@ -186,40 +203,44 @@ int	main(int argc, char *argv[])
 	    switch (argv[1][1]) {
 	    case 'c':  /*  car/cdr cells  */
 		    if (argv[1][2])
-			    a_1.nfreet = atoi(argv[1]+2);
+			    a_1.nfreet = parse_size("c", argv[1]+2);
 		    else if (argc > 2) {
 			    argc--;
 			    argv++;
-			    a_1.nfreet = atoi(argv[1]);
-		    }
+			    a_1.nfreet = parse_size("c", argv[1]);
+		    } else
+			    a_1.nfreet = parse_size("c", NULL);
 		    break;
 	    case 'a':  /*  atoms  */
 		    if (argv[1][2])
-			    a_1.natom = atoi(argv[1]+2);
+			    a_1.natom = parse_size("a", argv[1]+2);
 		    else if (argc > 2) {
 			    argc--;
 			    argv++;
-			    a_1.natom = atoi(argv[1]);
-		    }
+			    a_1.natom = parse_size("a", argv[1]);
+		    } else
+			    a_1.natom = parse_size("a", NULL);
 		    break;
 	    case 's':  /*  stack space  */
 		    if (argv[1][2]) {
-			    a_1.nstack = atoi(argv[1]+2);
+			    a_1.nstack = parse_size("s", argv[1]+2);
 		    } else if (argc > 2) {
 			    argc--;
 			    argv++;
-			    a_1.nstack = atoi(argv[1]);
-		    }
+			    a_1.nstack = parse_size("s", argv[1]);
+		    } else
+			    a_1.nstack = parse_size("s", NULL);
 		    jaan_1.hill = a_1.nstack;
 		    break;
 	    case 'p':  /*  print names / strings / reals  / arrays  */
 		    if (argv[1][2])
-			    a_1.npname = atoi(argv[1]+2);
+			    a_1.npname = parse_size("p", argv[1]+2);
 		    else if (argc > 2) {
 			    argc--;
 			    argv++;
-			    a_1.npname = atoi(argv[1]);
-		    }
+			    a_1.npname = parse_size("p", argv[1]);
+		    } else
+			    a_1.npname = parse_size("p", NULL);
 		    break;
 	    case 'x':
 		    istart = 0; /* no image file but requires SYSATOMS  */
@@ -228,13 +249,30 @@ int	main(int argc, char *argv[])
 	    case 'h':
 	    case '?':
 	    default:
-		    usage(argv[0]);
+		    usage(progname);
 		    return 0;
 	    }
 	    argc--;
 	    argv++;
     }
 #endif
+/*  Reject degenerate configurations before allocating.  NPNAME must exceed
+    NATOM because DPNP = NPNAME-NATOM maps atom indices into PNAME, and
+    NFREET must leave room for the cons cells above the atoms.  The last
+    test keeps BIGNUM = NFREET+NATOM and ISMALL well inside INTEGER range.  */
+    if (a_1.natom  < 100                    ||
+	a_1.nstack < 100                    ||
+	a_1.npname < a_1.natom + 100        ||
+	a_1.nfreet < a_1.natom + 1000       ||
+	(double) a_1.nfreet + (double) a_1.natom > 1.0e9) {
+	    fprintf(stderr, "Invalid memory configuration "
+			    "(cells=%d atoms=%d stack=%d pnames=%d).\n",
+		    (int) a_1.nfreet, (int) a_1.natom,
+		    (int) a_1.nstack, (int) a_1.npname);
+	    usage(progname);
+	    exit(1);
+    }
+
     carcdr_1.car = (integer *) calloc(a_1.nfreet, sizeof(integer));
     carcdr_1.cdr = (integer *) calloc(a_1.nfreet, sizeof(integer));
     b_1.pnp = (integer *) calloc(a_1.natom+1, sizeof(integer));
@@ -256,7 +294,7 @@ int	main(int argc, char *argv[])
 	    exit(-1);
     }
     if (istart && argc <= 1) {
-	    fprintf(stderr, "Image file required. For help:  %s -h\n", argv[0]);
+	    fprintf(stderr, "Image file required. For help:  %s -h\n", progname);
 	    exit(-1);
     }
 
@@ -299,13 +337,18 @@ L10:
     cl__1.csta = 0;
     f_clos(&cl__1);
 #else
-#ifdef unix
-    f4_open(10, argv[1], "r");
-#else
-    f4_open(10, argv[1], "rb");
-#endif
+    if (f4_open(10, argv[1], "rb") != 0) {
+	    fprintf(stderr, "Cannot open image file '%s'\n", argv[1]);
+	    exit(1);
+    }
     ixcc = rollin_(&c__10);
     f4_close(10);
+    if (ixcc == b_1.nil) {
+	    fprintf(stderr,
+		    "'%s' is not a valid Lisp F4 image, or does not fit the "
+		    "current memory configuration\n", argv[1]);
+	    exit(1);
+    }
 #endif
     lispf4_(&c__1);
     lspex_();
@@ -781,7 +824,6 @@ integer comppn_(integer *x, integer *y)
 
     /* Local variables */
     static integer main, i__;
-    extern /* Subroutine */ int getch_(real *, integer *, integer *);
     extern integer getpn_(integer *, integer *, integer *, integer *);
     static integer jb, jb2, ich, jch, min__, ipl, ipl2;
 
@@ -859,7 +901,7 @@ L50:
 #define lword1 (equiv_3)
 #define lword2 (equiv_3 + 1)
 #define lword3 (equiv_3 + 2)
-#define jpname ((shortint *) b_1.pname)  /*  ((shortint *)&b_1 + 2244)  */
+#define jpname ((integer *) b_1.pname)   /*  ((integer *)&b_1 + 1122)  */
 #define ipname ((integer *) b_1.pname)   /*  ((integer *)&b_1 + 1122)  */
     static integer jfirst, ind;
 
@@ -916,7 +958,10 @@ L50:
 /*                                      GET ARRAY BOUNDS */
     lbyte1 = b_1.pnp[*iptr - 1];
     lbyte1 = abs(lbyte1);
-    *lword1 = (lbyte1 - 2) / a_1.jbytes + 4;
+/*   Round LBYTE1 up to a word boundary the same way step 4100 does, then skip */
+/*   the two header words.  The original form (LBYTE1-2)/JBYTES+4 relied on */
+/*   truncation of a negative numerator and was one word high when LBYTE1 = 1. */
+    *lword1 = (lbyte1 + a_1.jbytes - 2) / a_1.jbytes + 3;
     if (*iactn == 4 && *ipart == 1) {
 	goto L4000;
     }
@@ -925,13 +970,13 @@ L50:
     if (*ipart < 2) {
 	goto L20;
     }
-    *lword2 = (lbyte2 - 2) / a_1.ibytes + 2;
+    *lword2 = (lbyte2 + a_1.ibytes - 2) / a_1.ibytes + 1;
     lbyte3 = jpname[*lword1 - 2];
     *llen2 = (lbyte3 - lbyte2) / a_1.ibytes;
     if (*ipart < 3) {
 	goto L20;
     }
-    *lword3 = (lbyte3 - 2) / a_1.bytes + 2;
+    *lword3 = (lbyte3 + a_1.bytes - 2) / a_1.bytes + 1;
     *llen3 = b_1.pnp[*iptr];
     *llen3 = (abs(*llen3) - lbyte3) / a_1.bytes;
 L20:
@@ -1004,7 +1049,7 @@ L4100:
 	++jfirst;
 	goto L4150;
 L4120:
-	jpname[*lword1 - 1] = (shortint) b_1.nil;
+	jpname[*lword1 - 1] = b_1.nil;
 L4150:
 	++(*lword1);
     }
@@ -1053,9 +1098,9 @@ L4350:
 /*                                      SET THE POINTERS */
 L4410:
     *lword1 -= *ilen;
-    jpname[*lword1 - 3] = (shortint) a_1.jbp;
+    jpname[*lword1 - 3] = a_1.jbp;
 L4420:
-    jpname[*lword1 - 2] = (shortint) a_1.jbp;
+    jpname[*lword1 - 2] = a_1.jbp;
 L4430:
     b_1.pnp[*iptr] = a_1.jbp;
     goto L9000;
@@ -1420,11 +1465,15 @@ integer rollin_(integer *lun)
     extern /* Subroutine */ int rehash_(void);
     static integer max__;
     extern /* Subroutine */ int rew_(integer *);
+    integer ierr;
 
 /* OMMON AND INTEGER DECLARATIONS */
 /* OMMON AND INTEGER DECLARATIONS END */
     inreal = a_1.bytes / a_1.jbytes;
-    dmpin_(lun, cinf, &c__1, &c__15);
+/*             A SHORT READ HERE MEANS THE FILE IS NOT AN IMAGE AT ALL */
+    if (dmpin_(lun, cinf, &c__1, &c__15) != 0) {
+	goto L90;
+    }
 /*             CHECK IF ROLLIN POSSIBLE */
     for (i__ = 1; i__ <= 8 || i__ == 1; ++i__) {
 	if (cinf[i__ - 1] != acom[i__ - 1]) {
@@ -1451,31 +1500,42 @@ integer rollin_(integer *lun)
     a_1.nfreep = *nfrepo + idiff1;
     a_1.jbp = *jbpo;
     a_1.numbp = *numbpo + a_1.npname - *npnamo;
+    ierr = 0;
     i__1 = a_1.nbmess / a_1.ibytes * a_1.maxmes;
-    dmpin_(lun, b_1.imess, &c__1, &i__1);
-    dmpin_(lun, area, &c__1, &a_1.narea);
+    ierr |= dmpin_(lun, b_1.imess, &c__1, &i__1);
+    ierr |= dmpin_(lun, area, &c__1, &a_1.narea);
 /*                                      STACK IS USED PRIOR TO RESET. */
     b_1.ip = 1;
     b_1.jp = a_1.nstack + 1;
     i__1 = (a_1.jbp - 2) / a_1.jbytes + 1;
-    dmpin2_(lun, jpname, &c__1, &i__1);
+    ierr |= dmpin2_(lun, jpname, &c__1, &i__1);
     i__1 = (a_1.numbp - 1) * inreal + 1;
     i__2 = a_1.npname * inreal;
-    dmpin2_(lun, jpname, &i__1, &i__2);
+    ierr |= dmpin2_(lun, jpname, &i__1, &i__2);
     i__1 = a_1.natomp + 1;
-    dmpin2_(lun, b_1.pnp, &c__1, &i__1);
+    ierr |= dmpin2_(lun, b_1.pnp, &c__1, &i__1);
 /* *SETC*      CALL  DMPIN2(LUN,CARCDR,NIL,NATOMP) */
-    dmpin2_(lun, carcdr_1.car, &b_1.nil, &a_1.natomp);
+    ierr |= dmpin2_(lun, carcdr_1.car, &b_1.nil, &a_1.natomp);
 /* *SETC*C */
-    dmpin2_(lun, carcdr_1.cdr, &b_1.nil, &a_1.natomp);
+    ierr |= dmpin2_(lun, carcdr_1.cdr, &b_1.nil, &a_1.natomp);
 /* *SETC*      CALL  DMPIN2(LUN,CARCDR,NFREEP+1,NFREET) */
     i__1 = a_1.nfreep + 1;
-    dmpin2_(lun, carcdr_1.car, &i__1, &a_1.nfreet);
+    ierr |= dmpin2_(lun, carcdr_1.car, &i__1, &a_1.nfreet);
 /* *SETC*C */
     i__1 = a_1.nfreep + 1;
-    dmpin2_(lun, carcdr_1.cdr, &i__1, &a_1.nfreet);
-    dmpin_(lun, bcom, &c__1, &a_1.nchtyp);
-    dmpin2_(lun, carcdr_1.chtab, &c__1, &a_1.nbytes);
+    ierr |= dmpin2_(lun, carcdr_1.cdr, &i__1, &a_1.nfreet);
+    ierr |= dmpin_(lun, bcom, &c__1, &a_1.nchtyp);
+    ierr |= dmpin2_(lun, carcdr_1.chtab, &c__1, &a_1.nbytes);
+/*             THE FILE ENDED EARLY.  EVERY CHECK THAT CAN REJECT AN IMAGE */
+/*             WITHOUT TOUCHING ANYTHING HAS ALREADY RUN AND RETURNED NIL VIA */
+/*             L90; BY THIS POINT THE ATOMS, CELLS AND PRINT NAMES HAVE BEEN */
+/*             PARTLY OVERWRITTEN, SO THERE IS NO CONSISTENT STATE TO RETURN */
+/*             TO -- NOT FOR MAIN, AND NOT FOR A LISP-LEVEL (ROLLIN N). */
+    if (ierr != 0) {
+	fprintf(stderr, "Image file is truncated or unreadable; the "
+			"interpreter state is now incomplete.  Stopping.\n");
+	exit(1);
+    }
 
 /*             CHECK IF WE NEED TO MOVE POINTERS */
 
@@ -1537,6 +1597,9 @@ L30:
     b_1.abup1 = 0;
     ret_val = *lun + a_1.numadd;
     goto L91;
+/*             REJECTED.  ALL THE JUMPS TO L90 HAPPEN BEFORE ANY GLOBAL STATE */
+/*             IS MODIFIED, SO A NIL RETURN MEANS "NOTHING WAS TOUCHED" AND IT */
+/*             IS SAFE FOR A LISP-LEVEL (ROLLIN N) TO CARRY ON. */
 L90:
     ret_val = b_1.nil;
 L91:
@@ -1756,6 +1819,13 @@ L550:
 
 /* --------------------------------------ENTRY UNKWOTE(X) */
 L1000:
+/*                                      PICK UP A PENDING KEYBOARD INTERRUPT, */
+/*                                      SO A LONG PRINT STAYS INTERRUPTIBLE */
+    if (f4_break_pending) {
+	f4_break_pending = 0;
+	b_1.errtyp = 26;
+	b_1.ibreak = TRUE_;
+    }
     if (b_1.ibreak) {
 	goto L18;
     }
@@ -2188,7 +2258,6 @@ L5210:
     /* Local variables */
     static integer main, iret, i__, j, l;
     static logical clear;
-    extern /* Subroutine */ int getch_(real *, integer *, integer *);
     extern integer getpn_(integer *, integer *, integer *, integer *);
     static integer ic, jb, jj, oldpos;
     extern integer getcht_(integer *);
@@ -2535,11 +2604,17 @@ L9:
 
     /* Local variables */
     static integer i__, k, jj, isi, num;
+    extern /* Subroutine */ int terpri_(void);
 
 /*                                      PRINT (-)INTEGER */
 /* OMMON AND INTEGER DECLARATIONS */
 /* OMMON AND INTEGER DECLARATIONS END */
     num = *inum;
+/*                                      KEEP THE 19-DIGIT SCRATCH AREA, PLUS A */
+/*                                      POSSIBLE SIGN, INSIDE PRBUFF */
+    if (b_1.prtpos + 20 > b_1.iobuff) {
+	terpri_();
+    }
 /* L100: */
     if (num >= 0) {
 	goto L101;
@@ -2582,7 +2657,6 @@ L280:
     /* Local variables */
     static integer i__, k;
     extern integer matom_(integer *);
-    extern /* Subroutine */ int putch_(integer1 *, integer *, integer *);
     extern /* Subroutine */ int wra1_(integer *, integer *, integer *, 
 	    integer *);
 
@@ -3280,7 +3354,7 @@ L2010:
 integer garb_(integer *gbctyp)
 {
     /* System generated locals */
-    shortint s__1;
+    integer s__1;
     integer ret_val, i__1, i__2;
 
     /* Local variables */
@@ -3289,11 +3363,10 @@ integer garb_(integer *gbctyp)
     static integer inds[3], ibot, lens[3], iret;
     extern /* Subroutine */ int mess_(integer *);
     static integer itop, isum, i__, j, n, s;
-    extern /* Subroutine */ int getch_(real *, integer *, integer *), markl_(
-	    integer *, integer *, integer *), putch_(integer1 *, integer *, 
-	    integer *), lispf4_(integer *);
+    extern /* Subroutine */ int markl_(integer *, integer *, integer *),
+	    lispf4_(integer *);
     static integer jb, is;
-#define jpname  ((shortint *) b_1.pname)  /* ((shortint *)&b_1 + 2244)  */
+#define jpname  ((integer *) b_1.pname)   /* ((integer *)&b_1 + 1122)  */
 #define ipname  ((integer *) b_1.pname)   /* ((integer *)&b_1 + 1122)   */
     static integer arrlst;
     static integer inreal, ispare;
@@ -3399,7 +3472,7 @@ L16:
     i__ = 1;
 L93:
     ret = 3;
-    s__1 = (shortint) carcdr_1.car[i__ - 1];
+    s__1 = carcdr_1.car[i__ - 1];
     if (s__1 == b_1.string || s__1 == b_1.substr || s__1 == b_1.array || 
 	    carcdr_1.cdr[i__ - 1] < 0) {
 	goto L5;
@@ -3599,7 +3672,7 @@ L402:
     if (carcdr_1.cdr[n - 1] < 0) {
 	goto L403;
     }
-    s__1 = (shortint) carcdr_1.car[n - 1];
+    s__1 = carcdr_1.car[n - 1];
     if (s__1 == b_1.string || s__1 == b_1.substr || s__1 == b_1.array) {
 	goto L402;
     }
@@ -3696,7 +3769,7 @@ L504:
     j = ibot + a_1.dpnp;
     b_1.pname[i__ - 1] = b_1.pname[j - 1];
     j *= inreal;
-    jpname[j - 1] = (shortint) (itop + a_1.nfreet);
+    jpname[j - 1] = itop + a_1.nfreet;
     b_1.pnp[ibot - 1] = -b_1.pnp[ibot - 1];
     ++ibot;
     goto L502;
@@ -3817,7 +3890,7 @@ L623:
     goto L650;
 /* <-- */
 L624:
-    jpname[ind1 - 1] = (shortint) s;
+    jpname[ind1 - 1] = s;
     ++ind1;
     --len;
     goto L623;
@@ -3843,7 +3916,11 @@ L650:
     }
 /* A-GBC */
 L652:
-    if (s > a_1.natom) {
+/*       ATOMS OCCUPY 1..NATOM.  A REGISTER OR STACK SLOT MAY LEGITIMATELY */
+/*       HOLD 0 (JACK USES IT AS A "NO VARIABLES" MARKER, AND TEMP1-TEMP3 */
+/*       HOLD SMALL INTEGERS), SO THE LOWER BOUND MATTERS: WITHOUT IT S=0 */
+/*       READS HTAB(-1). */
+    if (s < b_1.nil || s > a_1.natom) {
 	goto L654;
     }
     if (b_1.htab[s - 1] < 0) {
@@ -4095,13 +4172,12 @@ L50:
 /* Subroutine */ int rehash_(void)
 {
     /* System generated locals */
-    shortint s__1;
+    integer s__1;
     integer i__1, i__2;
 
     /* Local variables */
     static integer hadr, i__, l, n;
     extern integer ihadr_(integer *, integer *, integer *, integer *);
-    extern /* Subroutine */ int getch_(real *, integer *, integer *);
     static integer jb, ich1, ich2, ich3;
 
 /* OMMON AND INTEGER DECLARATIONS */
@@ -4115,13 +4191,17 @@ L50:
     }
     i__1 = a_1.natomp;
     for (n = 1; n <= i__1 || n == 1; ++n) {
-	s__1 = (shortint) carcdr_1.car[n - 1];
+	s__1 = carcdr_1.car[n - 1];
 	if (s__1 == b_1.string || s__1 == b_1.substr || s__1 == b_1.array) {
 	    goto L100;
 	}
 	jb = b_1.pnp[n - 1];
 	getch_(b_1.pname, &ich1, &jb);
 	l = b_1.pnp[n] - b_1.pnp[n - 1];
+/*             ZERO-LENGTH PNAME: DON'T INDEX BEFORE THE STRING */
+	if (l < 1) {
+	    l = 1;
+	}
 /* L20: */
 	i__2 = jb + l / 2;
 	getch_(b_1.pname, &ich2, &i__2);
@@ -4173,11 +4253,8 @@ integer matom_(integer *k)
     extern integer garb_(integer *);
     static integer hadr, i__, j, l;
     extern integer ihadr_(integer *, integer *, integer *, integer *);
-    extern /* Subroutine */ int getch_(real *, integer *, integer *);
     static integer nbnow;
-    extern /* Subroutine */ int putch_(integer1 *, integer *, integer *);
     static integer jb;
-    extern /* Subroutine */ int upcase_(integer *, integer *);
     static integer imatom, naleft, nbleft, ipl, ich1;
 
 /* OMMON AND INTEGER DECLARATIONS */
@@ -4607,20 +4684,24 @@ L4:
 
     /* Local variables */
     static integer k, i2, i1, i3, nw;
-    extern /* Subroutine */ int rda4_(integer *, integer *, integer *, 
+    extern /* Subroutine */ int rda4_(integer *, integer *, integer *,
 	    integer *), wra4_(integer *, integer *, integer *, integer *);
+    integer m;
 
 /* OMMON AND INTEGER DECLARATIONS */
 /* OMMON AND INTEGER DECLARATIONS END */
-    if (*i__ == 0) {
+    m = *i__;
+    if (m == 0) {
 	goto L10;
     }
-    if (*i__ > a_1.maxmes) {
-	*i__ = 31;
+/*             CLAMP A LOCAL COPY.  WRITING BACK THROUGH I WOULD CORRUPT THE */
+/*             CALLER'S CONSTANT, AND A NEGATIVE M WOULD INDEX OUTSIDE IMESS. */
+    if (m < 1 || m > a_1.maxmes) {
+	m = 31;
     }
 /* L1: */
     nw = a_1.nbmess / a_1.ibytes;
-    i2 = nw * *i__;
+    i2 = nw * m;
     i__1 = i2 + 1 - nw;
     wra4_(&b_1.lunuts, b_1.imess, &i__1, &i2);
     return 0;
@@ -4682,7 +4763,8 @@ L10:
     i__1 = *i1;
     i__2 = *i2;
     for (j = i__1; j <= i__2 || j == i__1; ++j)
-	f4_readu(*lun, (char *)&card[j], 4);
+	if (f4_readu(*lun, (char *)&card[j], 4) != 0)
+	    return 1;			/*  short read: image truncated  */
 #endif
     return 0;
 } /* dmpin2_ */
@@ -4721,7 +4803,7 @@ L10:
     }
     e_rsfe();
 #else
-    f4_start_read();
+    f4_start_read(*lun);
     i__1 = *i1;
     i__2 = *i2;
     for (i__ = i__1; i__ <= i__2 || i__ == i__1; ++i__) {
@@ -4771,7 +4853,8 @@ L10:
     i__1 = *i1;
     i__2 = *i2;
     for (j = i__1; j <= i__2 || j == i__1; ++j)
-	f4_readu(*lun, (char *)&area[j], 4);
+	if (f4_readu(*lun, (char *)&area[j], 4) != 0)
+	    return 1;			/*  short read: image truncated  */
 #endif
     return 0;
 } /* dmpin_ */
@@ -4868,11 +4951,10 @@ L10:
     }
     e_wsfe();
 #else
-    f4_start_read();
     i__1 = *i1;
     i__2 = *i2;
     for (i__ = i__1; i__ <= i__2 || i__ == i__1; ++i__) {
-	f4_write(*lun, (char *)&line[i__], 1);
+	f4_write_char(*lun, &line[i__]);
     }
     f4_write_lf(*lun);
 #endif
@@ -4888,11 +4970,10 @@ L1:
     }
     e_wsfe();
 #else
-    f4_start_read();
     i__2 = *i1;
     i__1 = *i2;
     for (i__ = i__2; i__ <= i__1 || i__ == i__2; ++i__)
-	f4_write(*lun, (char *)&line[i__], 1);
+	f4_write_char(*lun, &line[i__]);
     f4_write_lf(*lun);
 #endif
     return 0;
@@ -4945,10 +5026,9 @@ L1:
     }
     e_wsfe();
 #else
-    f4_start_read();
     i__1 = prompt_1.prolen;
     for (i__ = 1; i__ <= i__1 || i__ == 1; ++i__)
-	f4_write(b_1.lunuts, (char *)&prompt_1.protxt[i__ - 1], 1);
+	f4_write_char(b_1.lunuts, &prompt_1.protxt[i__ - 1]);
 #endif
 /* 10    FORMAT (1X,150A1) */
     goto L40;
@@ -4963,10 +5043,9 @@ L20:
     }
     e_wsfe();
 #else
-    f4_start_read();
     i__1 = k;
     for (i__ = 1; i__ <= i__1 || i__ == 1; ++i__)
-	f4_write(b_1.lunuts, (char *)&b_1.prbuff[i__ - 1], 1);
+	f4_write_char(b_1.lunuts, &b_1.prbuff[i__ - 1]);
     f4_write_lf(b_1.lunuts);
 #endif
 /* 101   FORMAT(1X,150A1) */
@@ -4977,6 +5056,7 @@ L20:
     }
     b_1.prtpos = 1;
 L40:
+    i__ = *i1;
 #ifdef FORTRAN_LIB
     io___248.ciunit = *lun;
     i__1 = s_rsfe(&io___248);
@@ -4993,11 +5073,11 @@ L40:
     }
     i__1 = e_rsfe();
 #else
-    f4_start_read();
+    f4_start_read(*lun);
     i__2 = *i1;
     i__3 = *i2;
     for (i__ = i__2; i__ <= i__3 || i__ == i__2; ++i__) {
-	i__1 = f4_read(*lun, (char *)&card[i__], 1);
+	i__1 = f4_read_char(*lun, &card[i__]);
 	if (i__1 != 0)
 	    goto L1;
     }
@@ -5006,7 +5086,17 @@ L40:
 	goto L1;
     }
     return 0;
+/*             END OF FILE.  IF THIS CALL ALREADY READ SOME CHARACTERS, THE */
+/*             FILE'S LAST LINE HAD NO TERMINATING NEWLINE: BLANK-FILL AND */
+/*             HAND IT OVER NOW, AND REPORT THE EOF ON THE NEXT CALL. */
 L1:
+    if (i__ > *i1) {
+	i__1 = *i2;
+	for (k = i__; k <= i__1; ++k) {
+	    card[k] = chars_1.space;
+	}
+	return 0;
+    }
     *ieof = 2;
     return 0;
 } /* rda1_ */
@@ -5018,9 +5108,7 @@ integer mpname_(integer *x, integer1 *buffer, integer *max__, integer *ipl)
 
     /* Local variables */
     static integer main, i__;
-    extern /* Subroutine */ int getch_(real *, integer *, integer *);
     extern integer getpn_(integer *, integer *, integer *, integer *);
-    extern /* Subroutine */ int putch_(integer1 *, integer *, integer *);
     static integer jb, ich;
 
 /* -- MOVES THE PNAME OF X TO THE BUFFER IN PACKED FORM */
@@ -5106,7 +5194,6 @@ L5:
     }
     e_wsfe();
 #else
-    f4_start_read();
     i__2 = *i1;
     i__1 = i3;
     for (i__ = i__2; i__ <= i__1 || i__ == i__2; ++i__)
@@ -5184,7 +5271,7 @@ integer openf_(integer *i__)
     al__1.aunit = *lun;
     f_rew(&al__1);
 #else
-    f4_rewind(*lun);
+    return f4_rewind(*lun);
 #endif
     return 0;
 } /* rew_ */
@@ -5205,10 +5292,14 @@ integer openf_(integer *i__)
     s_wsfe(&io___258);
     e_wsfe();
 #else
-    f4_write(*lun, "    ", 1);
+    f4_write_char(*lun, &chars_1.space);
 #endif
     return 0;
 } /* eject_ */
+
+/*  Longest file name / status / format string XCALL will accept.  MKCHA
+    clamps to this; anything longer is truncated rather than overrunning.  */
+#define	XCALL_NAMELEN	255
 
 integer xcall_(integer *fn, integer *x)
 {
@@ -5224,11 +5315,11 @@ integer xcall_(integer *fn, integer *x)
     /* Local variables */
     extern /* Subroutine */ int mkcha_(integer *, char *, ftnlen, int *);
     static integer a1, a2, a3, a4;
-    static struct { integer fill; char val[50+1]; char fill2[1]; } c2_st;
+    static struct { integer fill; char val[XCALL_NAMELEN+1]; char fill2[3]; } c2_st;
 #define c2 c2_st.val
-    static struct { integer fill; char val[50+1]; char fill2[1]; } c3_st;
+    static struct { integer fill; char val[XCALL_NAMELEN+1]; char fill2[3]; } c3_st;
 #define c3 c3_st.val
-    static struct { integer fill; char val[50+1]; char fill2[1]; } c4_st;
+    static struct { integer fill; char val[XCALL_NAMELEN+1]; char fill2[3]; } c4_st;
 #define c4 c4_st.val
     extern integer getnum_(integer *);
 
@@ -5249,6 +5340,10 @@ L1000:
     }
     ret_val = a1;
     a1 = getnum_(&a1);
+/*                                      LOGICAL UNIT MUST BE IN RANGE. */
+    if (a1 < 1 || a1 > b_1.maxlun) {
+	goto L10000;
+    }
     *x = carcdr_1.cdr[*x - 1];
     if (*x <= a_1.natom || *x > a_1.nfreet) {
 	goto L10000;
@@ -5257,7 +5352,7 @@ L1000:
     if (a2 < b_1.nil || a2 > a_1.natomp) {
 	goto L10000;
     }
-    mkcha_(&a2, c2, (ftnlen)50, &len2);
+    mkcha_(&a2, c2, (ftnlen)XCALL_NAMELEN, &len2);
     *x = carcdr_1.cdr[*x - 1];
     if (*x <= a_1.natomp || *x > a_1.nfreet) {
 	goto L10000;
@@ -5266,7 +5361,7 @@ L1000:
     if (a3 <= b_1.nil || a3 > a_1.natomp) {
 	goto L10000;
     }
-    mkcha_(&a3, c3, (ftnlen)50, &len3);
+    mkcha_(&a3, c3, (ftnlen)XCALL_NAMELEN, &len3);
     *x = carcdr_1.cdr[*x - 1];
     if (*x <= a_1.natomp || *x > a_1.nfreet) {
 	goto L10000;
@@ -5275,11 +5370,11 @@ L1000:
     if (a4 <= b_1.nil || a4 > a_1.natomp) {
 	goto L10000;
     }
-    mkcha_(&a4, c4, (ftnlen)50, &len4);
+    mkcha_(&a4, c4, (ftnlen)XCALL_NAMELEN, &len4);
 #ifdef FORTRAN_LIB
     o__1.oerr = 1;
     o__1.ounit = a1;
-    o__1.ofnmlen = 50;
+    o__1.ofnmlen = XCALL_NAMELEN;
     o__1.ofnm = c2;
     o__1.orl = 0;
     o__1.osta = c3;
@@ -5317,6 +5412,10 @@ L2000:
 	goto L10000;
     }
     a1 = getnum_(x);
+/*                                      LOGICAL UNIT MUST BE IN RANGE. */
+    if (a1 < 1 || a1 > b_1.maxlun) {
+	goto L10000;
+    }
 #ifdef FORTRAN_LIB
     cl__1.cerr = 1;
     cl__1.cunit = a1;
@@ -5354,7 +5453,6 @@ L10000:
 
     /* Local variables */
     static integer iqqn, iqqq[50], iqqr, i__;
-    extern /* Subroutine */ int getch_(real *, integer *, integer *);
 
 /*     RECUR 5 */
 /* OMMON AND INTEGER DECLARATIONS */
@@ -5376,7 +5474,7 @@ L10000:
 
 /*     A=CHAR(IQQQ(1)/CHDIV) */
     *(unsigned char *)&ch__1[0] = iqqq[0] % 256;
-    s_copy(a, ch__1, (ftnlen)50, (ftnlen)1);
+    s_copy(a, ch__1, a_len, (ftnlen)1);
     i__2 = iqqn - iqqr;
     for (i__ = 2; i__ <= i__2 || i__ == 2; ++i__) {
 /*  70 A=A(1:I-1) // CHAR(IQQQ(I)/CHDIV) */
@@ -5385,7 +5483,7 @@ L10000:
 	i__3[0] = i__ - 1, a__1[0] = a;
 	*(unsigned char *)&ch__1[0] = iqqq[i__ - 1] % 256;
 	i__3[1] = 1, a__1[1] = ch__1;
-	s_cat(a, a__1, i__3, &c__2, (ftnlen)50);
+	s_cat(a, a__1, i__3, &c__2, a_len);
     }
 #else
 
@@ -5396,6 +5494,12 @@ L10000:
     iqqn = b_1.pnp[*addr__];
 
     i__1 = iqqn - iqqr;
+/*  Never write past the caller's buffer.  LEN reports what was actually
+    stored, so the caller can terminate the string in bounds.  */
+    if (i__1 < 0)
+	    i__1 = 0;
+    if (i__1 > (int) a_len)
+	    i__1 = (int) a_len;
     if (len)
 	    *len = i__1;
     p = ((char *) b_1.pname) + iqqr - 1;
@@ -5409,10 +5513,11 @@ L10000:
 /* Subroutine */ static void brserv_(int sig)
 {
 /* --  INTERRUPT HANDLER */
-/* OMMON AND INTEGER DECLARATIONS */
-/* OMMON AND INTEGER DECLARATIONS END */
-    b_1.errtyp = 26;
-    b_1.ibreak = TRUE_;
+/* --  A handler may only touch a volatile sig_atomic_t, so it just raises a */
+/* --  flag; the interpreter turns that into ERRTYP/IBREAK when it polls. */
+    (void) sig;
+    f4_break_pending = 1;
+    signal(SIGINT, brserv_);	/*  re-arm, for System V signal semantics  */
 } /* brserv_ */
 
 

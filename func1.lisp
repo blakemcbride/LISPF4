@@ -17,15 +17,7 @@
                                              (VIRGINFN CY T)))
                                      (PUTD CY
                                            (COND
-                                             [(NULL (CDDR Y))
-                                               (COND
-                                                 [(EQ (CAADR Y)
-                                                      'NLAMDA)
-                                                   (CONS 'NLAMBDA
-                                                     (CONS
-                                                       (CAADR (CADR Y))
-                                                       (CDDADR Y]
-                                                 (T (CADR Y]
+                                             [(NULL (CDDR Y)) (CADR Y]
                                              (T (CONS 'LAMBDA (CDR Y]
                             (CAR Y))
                            (CAR X)
@@ -53,23 +45,12 @@
 (GETD
   (LAMBDA (FN) (AND (NULL LDFLG) ((SUBR . GETD) FN))))
   
-(SAVEDEF
-  [LAMBDA (A P)
-          (PROG ((PR (OR P 'EXPR)) (DEF (GETD A)))
-                (AND DEF (PUTPROP A PR DEF) (RETURN PR])
-  
-(UNSAVEDEF
-  [LAMBDA (A P)
-          (PROG ((PR (OR P 'EXPR)) DEF)
-                (SETQ DEF (GETPROP A PR))
-                (AND DEF (PUTPROP A 'FNCELL DEF) (RETURN PR])
-  
 (VIRGINFN
   (LAMBDA (X) (OR (GETPROP X 'VIRGINFN) ((SUBR . GETD) X))))
   
 )
 (PRINT 'FUNC1FNS)
-(RPAQQ FUNC1FNS (DE DEFINE DEFUN DF DM GETD SAVEDEF UNSAVEDEF VIRGINFN))
+(RPAQQ FUNC1FNS (DE DEFINE DEFUN DF DM GETD VIRGINFN))
 (RPAQQ FUNC1COMS FUNC1-PACKAGE)
 (RPAQ FUNC1GENNR 5)
 (PRINT 'FUNC1VARS)

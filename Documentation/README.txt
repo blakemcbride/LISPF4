@@ -57,18 +57,20 @@ need to make some adjustments in f2c.h
 
 The following files are included in the top directory:
 
-lispf41.f	Fortran source - part 1 of 2
-lispf42.f	Fortran source - part 2 of 2
+Lispf41.f	Fortran source - part 1 of 2
+Lispf42.f	Fortran source - part 2 of 2
 lispf4?.c	C version of Fortran code
 auxillary.c	Auxiliary C functions
-f4com.for	the Fortran common declarations
+F4COM.FOR	the Fortran common declarations
 SYSATOMS	system atoms needed when generating a new system
 Makefile.win	makefile for Windows NT using NMAKE
-Makefile.unx	makefile for Linux or Mac
-*.l		Lisp source files
+Makefile	makefile for Linux or Mac
+*.lisp		Lisp source files
 script.?	scripts to build the image files
 f2c.h		used by the .c files
-lisf4.orig	the entire original, untouched system
+lispf4.h	prototypes for the hand-written C support routines
+tests/		regression test suite ("make test")
+lispf4.orig	the entire original, untouched system
 
 Under Documentation:
 
@@ -99,7 +101,7 @@ First, if you like, edit the makefile for your system:
 
 Window/MSVC:   Makefile.win
 
-Linux or Mac:  Makefile.unx 
+Linux or Mac:  Makefile 
 
 
 
@@ -107,13 +109,13 @@ Second, build the system:
 
 Window/MSVC:   nmake -f Makefile.win
 
-Linux or Mac:   make -f Makefile.unx 
+Linux or Mac:   make 
 
 
 Running the system
 ------------------
 
-To run the system, you only need two files: lisp, basic.img.
+To run the system, you only need two files: lispf4, basic.img.
 The system can be reun as follows:
 
 ./lispf4 basic.img             Linux or Mac

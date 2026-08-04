@@ -150,7 +150,9 @@
                 (GO LOOP))))
   
 (KWOTE
-  (LAMBDA (X) (LIST 'QUOTE X)))
+  [LAMBDA (X)
+          (COND ((OR (NULL X) (NUMBERP X)) X)
+                (T (LIST 'QUOTE X])
   
 (NLSETQ
   (NLAMBDA (NLSETX) (ERRORSET NLSETX NIL)))

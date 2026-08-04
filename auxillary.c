@@ -4,33 +4,60 @@
 #include <ctype.h>
 #include <string.h>
 #include <time.h>
-#include "f2c.h"
+#include "lispf4.h"
 
 
-int getch_(char *vec, char *ch, int *i)
+/*  A character lives in the low 8 bits of an integer, blank padded above.
+    Building it arithmetically rather than by storing into byte 0 keeps this
+    independent of byte order: GETCHT recovers the character with (IC mod
+    256), which only agreed with a byte-0 store on a little-endian host.  */
+
+#define	F4_PAD	((integer) ' ')
+
+int getch_(void *vec, integer *ch, integer *i)
 {
-    ch[0] = vec[*i-1];
-    ch[1] = ' ';
-    ch[2] = ' ';
-    ch[3] = ' ';
+    const unsigned char *v = (const unsigned char *) vec;
+
+    *ch = (integer) v[*i - 1]
+	| (F4_PAD << 8) | (F4_PAD << 16) | (F4_PAD << 24);
     return 0;
 }
 
-int putch_(char *vec, char *ch, int *i)
+int putch_(void *vec, integer *ch, integer *i)
 {
-    vec[*i-1] = *ch;
+    ((unsigned char *) vec)[*i - 1] = (unsigned char) (*ch & 0xFF);
     return 0;
 }
 
-int upcase_(char *buff, int *n)
+int upcase_(integer *buff, integer *n)
 {
-	int	i, x;
-	for (x=i=0 ; i++ < *n ; x+=4)
-		buff[x] = toupper(buff[x]);
+	integer	i;
+
+	for (i = 0 ; i < *n ; i++)
+		buff[i] = (buff[i] & ~(integer) 0xFF)
+			| (integer) toupper((unsigned char) (buff[i] & 0xFF));
 	return 0;
 }
 
 static	FILE	*Logical_units[100];
+
+#define	F4_MAXLUN	((int)(sizeof Logical_units / sizeof Logical_units[0]))
+
+/*  Stream for a logical unit, or NULL if the unit number is out of range or
+    the unit is not open.  Every entry point below goes through this, so a
+    bad unit number can neither index outside the array nor be dereferenced.  */
+
+static	FILE	*f4_fp(int lun)
+{
+	if (lun < 0  ||  lun >= F4_MAXLUN)
+		return NULL;
+	return Logical_units[lun];
+}
+
+int	f4_isopen(int lun)
+{
+	return f4_fp(lun) != NULL;
+}
 
 void	setup()
 {
@@ -40,6 +67,8 @@ void	setup()
 
 int	f4_open(int lun, char *file, char *mode)
 {
+	if (lun < 0  ||  lun >= F4_MAXLUN)
+		return 1;
 	if (Logical_units[lun])
 		fclose(Logical_units[lun]);
 	Logical_units[lun] = fopen(file, mode);
@@ -48,6 +77,8 @@ int	f4_open(int lun, char *file, char *mode)
 
 int	f4_close(int lun)
 {
+	if (lun < 0  ||  lun >= F4_MAXLUN)
+		return 1;
 	if (Logical_units[lun]) {
 		fclose(Logical_units[lun]);
 		Logical_units[lun] = NULL;
@@ -55,24 +86,33 @@ int	f4_close(int lun)
 	return 0;
 }
 
-static	int	read_status;  /*  1=do read,  2=at eol, 3=at eof  */
+/*  End-of-line / end-of-file state, per logical unit.  A single global was
+    shared by every unit, so an EOF on one file affected reads from another.  */
 
-void	f4_start_read()
+static	int	read_status[F4_MAXLUN];  /*  1=do read,  2=at eol, 3=at eof  */
+
+void	f4_start_read(int lun)
 {
-	read_status = 1;
+	if (lun >= 0  &&  lun < F4_MAXLUN)
+		read_status[lun] = 1;
 }
 
-static	int	read1(FILE *fp)
+/*  Next character of the current line, or EOF if end-of-file was reached
+    without one.  Returning EOF rather than a blank is what lets f4_read
+    distinguish "nothing left to read" from "a line with no terminating
+    newline", which RDA1 needs in order not to discard that last line.  */
+
+static	int	read1(FILE *fp, int lun)
 {
 	int	c;
-	if (read_status == 1) {
+	if (read_status[lun] == 1) {
 		c = getc(fp);
 		if (c == '\r'  ||  c == '\n') {
-			read_status = 2;
+			read_status[lun] = 2;
 			c = ' ';
 		} else if (c == EOF  &&  (ferror(fp)  ||  feof(fp))) {
-			read_status = 3;
-			c = ' ';
+			read_status[lun] = 3;
+			return EOF;
 		} else if (c == '\t'  ||  c == '\f'  ||  c == '\v')
 			c = ' ';
 	} else
@@ -80,47 +120,100 @@ static	int	read1(FILE *fp)
 	return c;
 }
 
+/*  A1 read: one character into the low 8 bits of an integer, blank padded
+    above.  Built arithmetically so the character always lands where
+    getcht_ looks for it (ic % 256), whatever the host's byte order.
+    Returns non-zero only when no character was stored.  */
+
+int	f4_read_char(int lun, integer *ch)
+{
+	FILE	*fp = f4_fp(lun);
+	int	c;
+
+	if (!fp)
+		return 1;
+	if (read_status[lun] == 3)
+		return 1;
+	c = read1(fp, lun);
+	if (c == EOF)
+		return 1;
+	*ch = (integer) (unsigned char) c
+	    | (F4_PAD << 8) | (F4_PAD << 16) | (F4_PAD << 24);
+	return 0;
+}
+
+/*  A1 write: emit the character held in the low 8 bits.  */
+
+int	f4_write_char(int lun, const integer *ch)
+{
+	FILE	*fp = f4_fp(lun);
+
+	if (!fp)
+		return 1;
+	putc((int) (*ch & 0xFF), fp);
+	return 0;
+}
+
+/*  A4 read: four characters packed into one word, byte for byte.  RDA4 and
+    WRA4 are the only users and share this representation, so it round-trips.
+    NOT for single characters -- use f4_read_char, which is byte-order neutral.
+    Returns non-zero only when no character was stored.  */
+
 int	f4_read(int lun, char *v, int n)
 {
-	FILE	*fp = Logical_units[lun];
+	FILE	*fp = f4_fp(lun);
 	int	c;
-	if (read_status == 3)
+
+	if (!fp)
 		return 1;
-	v[0] = read1(fp);
+	if (read_status[lun] == 3)
+		return 1;
+	c = read1(fp, lun);
+	if (c == EOF)
+		return 1;
+	v[0] = c;
 	if (n == 1) {
 		v[1] = ' ';
 		v[2] = ' ';
 		v[3] = ' ';
 	} else {
-		v[1] = read1(fp);
-		v[2] = read1(fp);
-		v[3] = read1(fp);
+		c = read1(fp, lun);	v[1] = (c == EOF) ? ' ' : c;
+		c = read1(fp, lun);	v[2] = (c == EOF) ? ' ' : c;
+		c = read1(fp, lun);	v[3] = (c == EOF) ? ' ' : c;
 	}
 	return 0;
 }
 
+/*  Unformatted (binary) read.  Returns non-zero on a short read so that a
+    truncated or corrupt image file is detected instead of being loaded as
+    a run of 0xFF bytes.  */
+
 int	f4_readu(int lun, char *v, int n)
 {
-	FILE	*fp = Logical_units[lun];
-	v[0] = getc(fp);
-	if (n == 4) {
-		v[1] = getc(fp);
-		v[2] = getc(fp);
-		v[3] = getc(fp);
-	}
+	FILE	*fp = f4_fp(lun);
+	size_t	want = (n == 4) ? 4 : 1;
+
+	if (!fp)
+		return 1;
+	if (fread(v, 1, want, fp) != want)
+		return 1;
 	return 0;
 }
 
 int	f4_rewind(int lun)
 {
-	FILE	*fp = Logical_units[lun];
+	FILE	*fp = f4_fp(lun);
+	if (!fp)
+		return 1;
 	rewind(fp);
 	return 0;
 }
 
 int	f4_write(int lun, char *v, int n)
 {
-	FILE	*fp = Logical_units[lun];
+	FILE	*fp = f4_fp(lun);
+	if (!fp)
+		return 1;
 	putc(v[0], fp);
 	if (n == 4) {
 		putc(v[1], fp);
@@ -132,7 +225,9 @@ int	f4_write(int lun, char *v, int n)
 
 int	f4_write_lf(int lun)
 {
-	FILE	*fp = Logical_units[lun];
+	FILE	*fp = f4_fp(lun);
+	if (!fp)
+		return 1;
 	putc('\n', fp);
 	return 0;
 }

@@ -242,25 +242,25 @@
                                 (LIST 'AND (ITP-C L) (ITP-C R)))
                               ((MATCH
                                  '((? (1 T NIL L T))
-                                    [
+                                    <
                                     (? (1 T NIL R T)))
                                  ARG)
                                 (LIST 'LESSP (ITP-C L) (ITP-C R)))
                               ((MATCH
                                  '((? (1 T NIL L T))
-                                    ]
+                                    >
                                     (? (1 T NIL R T)))
                                  ARG)
                                 (LIST 'GREATERP (ITP-C L) (ITP-C R)))
                               ((MATCH
                                  '((? (1 T NIL L T))
-                                    [=
+                                    <=
                                     (? (1 T NIL R T)))
                                  ARG)
                                 (LIST 'LEQ (ITP-C L) (ITP-C R)))
                               ((MATCH
                                  '((? (1 T NIL L T))
-                                    ]=
+                                    >=
                                     (? (1 T NIL R T)))
                                  ARG)
                                 (LIST 'GEQ (ITP-C L) (ITP-C R)))

@@ -1,0 +1,21 @@
+READY
+--- Illegal argument (subr3)
+ARRAY - 2.1474833E9
+(ARRAY BROKEN)
+--- Illegal argument (subr3)
+ARRAY - 2.1474833E9
+(ARRAY BROKEN)
+--- Illegal argument (subr3)
+ARRAY - 32767
+(ARRAY BROKEN)
+--- Illegal argument (subr3)
+ARRAY - 1.0737416E9
+(ARRAY BROKEN)
+--- Illegal argument (subr3)
+ARRAY - -1
+(ARRAY BROKEN)
+READY
+(15 5 5)
+OK
+OK
+333

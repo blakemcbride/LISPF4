@@ -12,6 +12,9 @@ The current status of the C conversion eliminates the need for a FORTRAN compile
 
 Interlisp is a dynamically scoped Lisp system.  It supports LAMBDA (evaluates function arguments), NLAMBDA (doesn't evaluate its arguments), and a variable number of arguments.  Macros are supported as well.
 
+Note: the optional `prolog.lisp` package is experimental and incomplete -- its resolution
+loop is truncated in the source.  Every other package loads and runs.
+
 The system comes with a pretty complete user manual and implementor's manual.  I also include the documentation this system is based on.
 
 Pre-built systems for Linux, Mac, and Windows are also included.

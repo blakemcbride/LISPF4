@@ -1,0 +1,5 @@
+(UNION (QUOTE (A B)) (QUOTE (B C)))
+(UNION NIL (QUOTE (A)))
+(UNION (QUOTE (A)) NIL)
+(UNION (QUOTE ((X) B)) (QUOTE (B C)))
+(EXIT)

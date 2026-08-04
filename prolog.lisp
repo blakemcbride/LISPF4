@@ -27,16 +27,19 @@
                                (IMM (SETIMM M 7 (ALLOCATE)) 7])
   
 (POP
-  [LAMBDA (S) (PROG1 (CAR S) (SETQ S (CDR S])
+  [NLAMBDA (POP-S-)
+           (PROG1 (CAR (EVAL POP-S-))
+                  (SET POP-S- (CDR (EVAL POP-S-])
   
 (PUSH
-  (LAMBDA (V S) (SETQ S (CONS V S))))
+  (NLAMBDA (PUSH-V- PUSH-S-)
+           (SET PUSH-S- (CONS (EVAL PUSH-V-) (EVAL PUSH-S-)))))
   
 (SEEK
   [LAMBDA (E C)
           (DO WHILE (AND C (NULL (CAR C))) DO (POP E) (POP C))
-          (COND ((NULL C) (FUNCALL *TOPFUN*))
-                ((ATOM (CAR C)) (FUNCALL (CAR C) E (CDR C)))
+          (COND ((NULL C) (APPLY* *TOPFUN*))
+                ((ATOM (CAR C)) (APPLY* (CAR C) E (CDR C)))
                 ((DO])
   
 (UNIFY
@@ -57,7 +60,7 @@
                V)))
   
 (FINAL
-  (LAMBDA (X) (CDR (MEMQ NIL X))))
+  (LAMBDA (X) (CDR (MEMB NIL X))))
   
 (BIND
   [LAMBDA (X Y N)

@@ -20,6 +20,16 @@ LISPF4 is an InterLisp interpreter originally written in FORTRAN IV by Mats Nord
 4. Changed from static COMMON block arrays to dynamic allocation (calloc)
 5. Made the code more portable across 32/64-bit platforms
 
+### Bug-fix pass (2026-08-03)
+
+See `Bugs1.md` and `Plan1.md`. The most important structural correction: the original
+FORTRAN declared `JPNAME` as `INTEGER*2` inside `ARRUTL` and `GARB` but as `INTEGER` in
+`ROLLIN`/`ROLLOUT`, while `JBYTES = 4`. F2C reproduced that inconsistency, which silently
+truncated array pointer slots and the bignum GC's forwarding pointers to 16 bits. `jpname`
+is now `(integer *)` everywhere. Likewise the `SPECAT` statement function's `INTEGER*2`
+argument became a narrowing cast that misclassified ordinary values as strings/arrays; the
+comparison is now done at full width. **Do not reintroduce `shortint` in these paths.**
+
 ---
 
 ## File Structure
@@ -32,6 +42,7 @@ LISPF4 is an InterLisp interpreter originally written in FORTRAN IV by Mats Nord
 | `lispf42.c` | ~5423 | Auxiliary routines: `main()`, `init1_()`, `init2_()`, `rollin_()`, `rollou_()`, `move_()`, `garb_()` (GC), reader, printer, arithmetic, atoms, arrays, strings |
 | `auxillary.c` | ~190 | Custom C replacements for F2C library: `getch_()`, `putch_()`, file I/O (`f4_open`, `f4_close`, `f4_read`, `f4_write`, etc.), `mslft_()`, `mtime_()`, `mdate_()` |
 | `f2c.h` | ~230 | Type definitions: `integer`=`int4`=`int`, `real`=`float4`=`float`, `logical`=`int4`=`int` |
+| `lispf4.h` | ~55 | Single set of prototypes for the auxillary.c routines and the SIGINT flag |
 
 ### FORTRAN Source Files (reference only - do not re-convert)
 
@@ -58,14 +69,14 @@ LISPF4 is an InterLisp interpreter originally written in FORTRAN IV by Mats Nord
 | `ifdo.lisp` | IF/DO WHILE/DO FOR package |
 | `match.lisp` | Pattern matching package (required by ifdo.lisp, struct.lisp) |
 | `struct.lisp` | Named data structures package |
-| `prolog.lisp` | Prolog-like features |
+| `prolog.lisp` | **Experimental / incomplete.** `SEEK`'s compound-goal `COND` clause is truncated in the source, so resolution does not run. Mechanical defects (undefined `MEMQ`/`FUNCALL`, non-mutating `POP`/`PUSH`) were fixed 2026-08-04; the missing logic was not invented. See `Bugs2.md` L4. |
 
 ### Build Files
 
 | File | Description |
 |------|-------------|
-| `Makefile.unx` | Makefile for Linux/Mac (`make -f Makefile.unx`) |
-| `Makefile.win` | Makefile for Windows/MSVC (`nmake -f Makefile.win`) |
+| `Makefile` | Build for Linux/Mac — the default, so plain `make` works |
+| `Makefile.win` | Build for Windows/MSVC (`nmake -f Makefile.win`) |
 | `SYSATOMS` | System atom definitions read at init (7 groups + 22 atoms + messages) |
 | `script.1` | Builds `bare.img` from SYSATOMS (runs `./lispf4 -x <script.1`) |
 | `script.2` | Builds `basic.img` from bare.img + all .lisp files |
@@ -82,13 +93,13 @@ LISPF4 is an InterLisp interpreter originally written in FORTRAN IV by Mats Nord
 ## Build Process
 
 ```
-make -f Makefile.unx           # builds lispf4, bare.img, basic.img
-make -f Makefile.unx lispf4    # just the executable
-make -f Makefile.unx bare.img  # bare image (needs lispf4 + SYSATOMS)
-make -f Makefile.unx basic.img # full image (needs bare.img + .lisp files)
+make           # builds lispf4, bare.img, basic.img
+make lispf4    # just the executable
+make bare.img  # bare image (needs lispf4 + SYSATOMS)
+make basic.img # full image (needs bare.img + .lisp files)
 ```
 
-Default compile-time parameters (set in Makefile.unx):
+Default compile-time parameters (set in Makefile):
 ```
 CELLS=100000    # CAR/CDR array size (cons cells + atoms)
 ATOMS=3000      # number of atoms
@@ -188,9 +199,15 @@ b_1.pname     = calloc(NPNAME+2, sizeof(real));      // print names/strings/real
 
 ### Character Handling
 
-- Characters are packed into integers (4 bytes per integer, JBYTES=4)
-- `getch_(vec, ch, i)` - extract byte `i` from character vector `vec` into `ch`
-- `putch_(vec, ch, i)` - insert byte from `ch` into position `i` of vector `vec`
+- Print names are densely packed byte arrays; JBYTES=4 is the *word* size used for
+  array and bignum indexing, not a per-character stride
+- A single character is held in the low 8 bits of an `integer`, blank padded above
+  (`' '<<8 | ' '<<16 | ' '<<24`). `getcht_`/`setcht_` recover it with `ic % 256`.
+- `getch_(vec, ch, i)` - read byte `i` of `vec` and build the padded character in `*ch`
+- `putch_(vec, ch, i)` - store the low byte of `*ch` into byte `i` of `vec`
+- `f4_read_char` / `f4_write_char` do the same for A1 file I/O
+- All four build the value arithmetically, so byte order does not matter.  `f4_read` /
+  `f4_write` move four bytes verbatim and are for A4 packed text and raw image words only
 - Character type table `CHTAB[256]` maps ASCII values to token types
 - Types set by `setcht_()`, queried by `getcht_()`
 
@@ -286,8 +303,9 @@ Mark-and-sweep with compaction:
 | `matom_()` | lispf42.c:4144 | Atom creation |
 | `getcht_()` | lispf42.c:~4445 | Query character type table |
 | `setcht_()` | lispf42.c:~4470 | Set character type table entry |
-| `getch_()` | auxillary.c:10 | Extract byte from integer array |
-| `putch_()` | auxillary.c:19 | Insert byte into integer array |
+| `getch_()` | auxillary.c | Read byte -> blank-padded character in an integer |
+| `putch_()` | auxillary.c | Store a character's low byte into a byte array |
+| `f4_fp()` | auxillary.c | Validated lookup of a logical unit's `FILE*` (NULL if bad/closed) |
 | `f4_open()` | auxillary.c:41 | Open file on logical unit |
 | `f4_read()` | auxillary.c:83 | Read formatted (text) data |
 | `f4_readu()` | auxillary.c:102 | Read unformatted (binary) data |
@@ -335,7 +353,10 @@ The interpreter uses FORTRAN-style logical unit numbers for I/O:
 | 4 (`LUNSYS`) | SYSATOMS file (only during init) | opened/closed by `init2_()` |
 | 10-30 | User files | opened via `(XCALL 1 ...)` / `(OPEN ...)` |
 
-`Logical_units[100]` array in auxillary.c maps unit numbers to `FILE*` pointers. Units 5 and 6 are set up by `setup()`.
+`Logical_units[100]` array in auxillary.c maps unit numbers to `FILE*` pointers. Units 5 and 6 are
+set up by `setup()`. All access goes through `f4_fp()`, which range-checks the unit number and
+returns NULL for a closed unit, so every `f4_*` entry point reports failure instead of faulting.
+`b_1.maxlun` (99) is enforced by ROLLIN, ROLLOUT, REWIND, IOTAB **and** XCALL.
 
 ### Read Path
 
@@ -343,7 +364,7 @@ The interpreter uses FORTRAN-style logical unit numbers for I/O:
 2. It calls `rda1_()` at label L1200 to read a new line from `LUNIN`
 3. `rda1_()` calls `f4_read()` in auxillary.c for each character
 4. `f4_read()` calls `read1()` which calls `getc()` on the FILE* for the logical unit
-5. `read1()` tracks `read_status`: 1=reading, 2=at EOL, 3=at EOF
+5. `read1()` tracks `read_status[lun]` (per unit): 1=reading, 2=at EOL, 3=at EOF
 6. On EOF, `rda1_()` sets `ieof=2`, which `shift_()` detects at L1300
 
 ### IOTAB

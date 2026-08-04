@@ -507,7 +507,10 @@
           (NULL (EVERY EVERYX EVERYFN1 EVERYFN2))))
   
 (NTHCHAR
-  (LAMBDA (X N F) (CAR (NTH (UNPACK X F) N))))
+  [LAMBDA (X N F)
+          (PROG ((L (UNPACK X F)))
+                (AND (LESSP N 0) (SETQ N (PLUS (LENGTH L) N 1)))
+                (RETURN (CAR (NTH L N])
   
 (PROPNAMES
   (LAMBDA (A)
@@ -671,8 +674,8 @@
           (PROG (VAL)
            LP   [COND ((NLISTP X) (RETURN (ENDCOLLECT VAL Y)))
                       ([COND ((LITATOM (CAR X))
-                               (NOT (MEMB (CAR X) Y)))
-                             (T (NOT (MEMBER (CAR X) Y]
+                               (NULL (MEMB (CAR X) Y)))
+                             (T (NULL (MEMBER (CAR X) Y]
                         (SETQ VAL (DOCOLLECT (CAR X) VAL]
                 (SETQ X (CDR X))
                 (GO LP))))

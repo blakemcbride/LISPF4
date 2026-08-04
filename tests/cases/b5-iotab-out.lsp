@@ -1,0 +1,3 @@
+(IOTAB 5 50)
+(PLUS 1 2)
+(EXIT)

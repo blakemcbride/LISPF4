@@ -6,8 +6,8 @@
 
 
 LAST_UPDATE_YEAR = 2026
-LAST_UPDATE_MONTH = 2
-LAST_UPDATE_DAY = 26
+LAST_UPDATE_MONTH = 8
+LAST_UPDATE_DAY = 3
 
 # Set defaults
 PARMS = -DCELLS=100000 -DATOMS=3000 -DSTACK=1500 -DARRAY=5000
@@ -29,6 +29,8 @@ bare.img : lispf4.exe SYSATOMS script.1
 
 lispf4.exe : lispf41.obj lispf42.obj auxillary.obj
 	cl $(CFLAGS) -Felispf4.exe lispf41.obj lispf42.obj auxillary.obj
+
+lispf41.obj lispf42.obj auxillary.obj : f2c.h lispf4.h
 
 #lispf41.c : lispf41.f
 #	$(F2C) $(FFLAGS) $<

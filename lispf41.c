@@ -4,6 +4,7 @@
 */
 
 #include "f2c.h"
+#include "lispf4.h"
 #include <stdio.h>
 
 
@@ -107,7 +108,7 @@ static integer c__40 = 40;
 /* Subroutine */ int lispf4_(integer *iree)
 {
     /* System generated locals */
-    shortint s__1;
+    integer s__1;
     integer i__1, i__2, i__3, i__4, i__5, i__6, i__7, i__8, i__9, i__10;
     static real equiv_2[1];
 
@@ -128,7 +129,6 @@ static integer c__40 = 40;
 #define n ((integer *)equiv_2)
     extern integer iread_(integer *);
     static real r__, s;
-    extern int getch_(void *, void *, int *, ...);
     extern integer xcall_(integer *, integer *), openf_(integer *), subpr_(
 	    integer *, integer *, integer *), equal_(integer *, integer *), 
 	    getpn_(integer *, integer *, integer *, integer *), ratom_(
@@ -146,7 +146,6 @@ static integer c__40 = 40;
     extern /* Subroutine */ int mtime_(integer *), mdate_(integer *), apush_(
 	    integer *);
     static integer n1, n2;
-    extern /* Subroutine */ int putch_(real *, integer *, integer *);
     static integer jndex, kalle;
     extern /* Subroutine */ int apush2_(integer *, integer *);
     static integer jb, ic, ii, ll, locale, irflag;
@@ -154,7 +153,7 @@ static integer c__40 = 40;
     extern integer getcht_(integer *), comppn_(integer *, integer *), getnum_(
 	    integer *), rollin_(integer *);
 #define ipname  ((integer *) b_1.pname)   /*  ((integer *)&b_1 + 1122)  */
-#define jpname  ((shortint *) b_1.pname)  /*  ((shortint *)&b_1 + 2244)  */
+#define jpname  ((integer *) b_1.pname)   /*  ((integer *)&b_1 + 1122)  */
     extern /* Subroutine */ int iprint_(integer *), terpri_(void);
     extern integer mkreal_(real *);
     extern /* Subroutine */ int rollou_(integer *), 
@@ -245,7 +244,7 @@ L1:
     b_1.arg2 = b_1.nil;
     jaan_1.env = 0;
     jaan_1.tops = 0;
-    getch_(c_b8, prompt_1.protxt, &c__1, (ftnlen)1);
+    getch_(c_b8, prompt_1.protxt, &c__1);
     prompt_1.prolen = 1;
     goto L1500;
 
@@ -339,6 +338,12 @@ L1500:
 /*               ============================ */
 
 L1600:
+/*                                     ! PICK UP A PENDING KEYBOARD INTERRUPT */
+    if (f4_break_pending) {
+	f4_break_pending = 0;
+	b_1.errtyp = 26;
+	b_1.ibreak = TRUE_;
+    }
     if (b_1.ibreak) {
 	goto L2400;
     }
@@ -357,7 +362,7 @@ L1600:
     if (b_1.arg == b_1.nil || b_1.arg == b_1.t) {
 	goto L999;
     }
-    s__1 = (shortint) carcdr_1.car[b_1.arg - 1];
+    s__1 = carcdr_1.car[b_1.arg - 1];
     if (s__1 <= b_1.substr && s__1 >= b_1.array) {
 	goto L999;
     }
@@ -1666,7 +1671,10 @@ L11080:
     if (*n < 1 || *n > b_1.maxlun) {
 	goto L25000;
     }
-    rew_(n);
+/*                                      ! FAILS IF THE UNIT IS NOT OPEN */
+    if (rew_(n) != 0) {
+	goto L25000;
+    }
     goto L998;
 /* ----------------------------------------------------------------------- */
 /*       SUBR 1 (OTHERS) */
@@ -1711,7 +1719,7 @@ L11205:
     if (b_1.arg > a_1.natom) {
 	goto L3090;
     }
-    s__1 = (shortint) carcdr_1.car[b_1.arg - 1];
+    s__1 = carcdr_1.car[b_1.arg - 1];
     if (s__1 <= b_1.substr && s__1 >= b_1.array) {
 	goto L3090;
     }
@@ -1802,8 +1810,10 @@ L11250:
 
 /* LAST */
 L11255:
+/*                                      ! THE STANDARD SAYS LAST OF A NON-LIST */
+/*                                      ! IS NIL, NOT THE ARGUMENT ITSELF */
     if (b_1.arg <= a_1.natom || b_1.arg > a_1.nfreet) {
-	goto L998;
+	goto L3090;
     }
 L11256:
     b_1.temp1 = carcdr_1.cdr[b_1.arg - 1];
@@ -1870,7 +1880,7 @@ L11340:
     i__1 = min__;
     i__2 = a_1.natomp;
     for (i__ = i__1; i__ <= i__2 || i__ == i__1; ++i__) {
-	s__1 = (shortint) carcdr_1.car[i__ - 1];
+	s__1 = carcdr_1.car[i__ - 1];
 	if (! (s__1 <= b_1.substr && s__1 >= b_1.array)) {
 	    *ires = cons_(&i__, ires);
 	}
@@ -2564,7 +2574,7 @@ L12580:
     if (b_1.arg > a_1.natom) {
 	goto L12590;
     }
-    s__1 = (shortint) carcdr_1.car[b_1.arg - 1];
+    s__1 = carcdr_1.car[b_1.arg - 1];
     if (s__1 <= b_1.substr && s__1 >= b_1.array) {
 	goto L25020;
     }
@@ -2588,7 +2598,7 @@ L12600:
     if (b_1.arg > a_1.natom) {
 	goto L12610;
     }
-    s__1 = (shortint) carcdr_1.car[b_1.arg - 1];
+    s__1 = carcdr_1.car[b_1.arg - 1];
     if (s__1 <= b_1.substr && s__1 >= b_1.array) {
 	goto L25020;
     }
@@ -2607,6 +2617,13 @@ L12620:
     *n = b_1.arg;
     b_1.arg = b_1.arg2;
     apush_(&b_1.arg2);
+/*                                      ! THE STANDARD SAYS RPT RETURNS THE */
+/*                                      ! VALUE OF THE LAST EVALUATION (NIL IF */
+/*                                      ! THE BODY NEVER RUNS).  KEEP IT ON THE */
+/*                                      ! A-STACK SO IT SURVIVES A GBC. */
+/*                                      ! SLOTS: JP-1 = LAST VALUE, JP = FORM, */
+/*                                      !        JP+1 = COUNT */
+    apush_(&b_1.nil);
 L12630:
     if (*n <= a_1.numadd) {
 	goto L12650;
@@ -2617,13 +2634,15 @@ L12630:
 /* --R22       RETURN FROM EVAL(ARG) */
 
 L12640:
-    *n = b_1.stack[b_1.jp] - 1;
-    b_1.stack[b_1.jp] = *n;
-    b_1.arg = b_1.stack[b_1.jp - 1];
+    b_1.stack[b_1.jp - 1] = *ires;
+    *n = b_1.stack[b_1.jp + 1] - 1;
+    b_1.stack[b_1.jp + 1] = *n;
+    b_1.arg = b_1.stack[b_1.jp];
     goto L12630;
 L12650:
-    b_1.jp += 2;
-    goto L3090;
+    *ires = b_1.stack[b_1.jp - 1];
+    b_1.jp += 3;
+    goto L998;
 
 /* SASSOC */
 L12655:
@@ -2754,6 +2773,12 @@ L12730:
 	goto L998;
     }
     *n = b_1.iobuff;
+/*                                      ! PRINT MARGINS (LMARG=7, MARG=8) MUST */
+/*                                      ! LEAVE PRIINT'S 19-DIGIT SCRATCH AREA */
+/*                                      ! INSIDE PRBUFF */
+    if (n1 == 7 || n1 == 8) {
+	*n = b_1.iobuff - 20;
+    }
     if (n1 != 1) {
 	goto L12735;
     }
@@ -2781,6 +2806,11 @@ L12745:
     if (n2 < 1 || n2 > *n) {
 	goto L25010;
     }
+/*                                      ! DON'T SELECT A UNIT THAT IS NOT OPEN */
+/*                                      ! (N1=1 IS LUNIN, N1=5 IS LUNUT) */
+    if ((n1 == 1 || n1 == 5) && ! f4_isopen(n2)) {
+	goto L25010;
+    }
     iotab[n1 - 1] = n2;
     if (n1 == 2) {
 	shift_(&c__2);
@@ -2791,10 +2821,14 @@ L12746:
     if (b_1.arg2 <= a_1.natom || b_1.arg2 > a_1.nfreet) {
 	goto L3090;
     }
-    b_1.arg2 = carcdr_1.cdr[b_1.arg2 - 1];
+/*                                      ! X IS A TAIL OF Y IF IT IS EQ TO SOME */
+/*                                      ! NUMBER OF CDRS *GREATER OR EQUAL TO */
+/*                                      ! ZERO* OF Y, SO TEST BEFORE CDR'ING; */
+/*                                      ! OTHERWISE (TAILP L L) WRONGLY FAILS */
     if (b_1.arg == b_1.arg2) {
 	goto L998;
     }
+    b_1.arg2 = carcdr_1.cdr[b_1.arg2 - 1];
     goto L12746;
 
 /* UNPACK */
@@ -2901,7 +2935,13 @@ L15015:
 	    goto L25030;
 	}
 	args[ireg + 4] = getnum_(&b_1.arg);
-	if (args[ireg + 4] < 0) {
+/*                                      ! NO PART CAN EXCEED THE WHOLE PNAME */
+/*                                      ! AREA.  BOUNDING EACH DIMENSION HERE */
+/*                                      ! IS WHAT KEEPS THE SUBTRACTION AND */
+/*                                      ! THE BYTE-SIZE EXPRESSION BELOW FROM */
+/*                                      ! OVERFLOWING AND WRAPPING PAST THEIR */
+/*                                      ! OWN SANITY CHECKS. */
+	if (args[ireg + 4] < 0 || args[ireg + 4] > a_1.npname) {
 	    goto L25030;
 	}
 /* L15016: */
@@ -2963,7 +3003,7 @@ L15040:
     if (b_1.temp1 == b_1.nil || b_1.temp1 > a_1.nfreet) {
 	goto L25030;
     }
-    s__1 = (shortint) carcdr_1.car[b_1.temp1 - 1];
+    s__1 = carcdr_1.car[b_1.temp1 - 1];
     if (s__1 <= b_1.substr && s__1 >= b_1.array) {
 	goto L25030;
     }
@@ -3037,7 +3077,7 @@ L15130:
 
 L15142:
     jndex = (a_1.numbp - 1) * a_1.bytes / a_1.jbytes;
-    jpname[jndex - 1] = (shortint) b_1.arg3;
+    jpname[jndex - 1] = b_1.arg3;
     ireg = 1;
     goto L15148;
 

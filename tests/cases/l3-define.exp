@@ -1,0 +1,9 @@
+(D1)
+42
+(D2)
+(NLAMBDA L (CAR L))
+7
+(D3)
+(LAMBDA (X) (TIMES X 2))
+42
+(D4)

@@ -1,0 +1,2 @@
+(REWIND 50)
+(EXIT)
