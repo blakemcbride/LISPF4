@@ -91,8 +91,10 @@
                 ((SETQ *N* (SETIMM (MAKRECORD 8) 0 *N*])
   
 (TRANSFER
-  [LAMBDA (X Y)
-          (SETQ X (PROG1 (IMM X 0) (SETQ Y (SETIMM X 0 Y])
+  [NLAMBDA (TR-X- TR-Y-)
+           (PROG ((X (EVAL TR-X-)) (Y (EVAL TR-Y-)))
+                 (SET TR-X- (IMM X 0))
+                 (SET TR-Y- (SETIMM X 0 Y])
   
 (MAKRECORD
   [LAMBDA (N)
