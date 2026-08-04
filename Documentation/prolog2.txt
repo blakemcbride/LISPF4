@@ -1,0 +1,208 @@
+PROLOG2 - a small Prolog for LISPF4
+===================================
+
+prolog2.lisp is a self-contained Prolog interpreter written in LISPF4.
+
+It is new code.  It is NOT a repair or reconstruction of prolog.lisp,
+which is a different and much older experiment; see the note at the end
+of this file.  The two packages share no code and no function names, and
+both may be loaded at the same time.
+
+	(READFILE "prolog2.lisp")
+
+prolog2.lisp needs nothing but the base system.
+
+
+Terms
+-----
+
+Terms are ordinary S-expressions.  An atom whose print name begins with a
+question mark is a logic variable:
+
+	?X   ?Y   ?ANSWER		variables
+	TOM  42  (LIKES ?X WINE)	everything else is a constant or
+					a compound term
+
+Because terms are S-expressions, a Prolog list is just a Lisp list, and
+the usual head/tail pattern is written as a dotted pair:
+
+	(?HEAD . ?TAIL)		matches (A B C) with ?HEAD=A ?TAIL=(B C)
+
+NIL is the empty list, as in Lisp.
+
+
+Clauses
+-------
+
+A clause is asserted with <-, which does not evaluate its arguments:
+
+	(<- (PARENT TOM BOB))				a fact
+	(<- (ANC ?X ?Z) (PARENT ?X ?Y) (ANC ?Y ?Z))	a rule
+
+The first argument is the head; the rest are the goals of the body.
+Clauses are tried in the order asserted.  Clauses are kept on the
+PCLAUSES property of the predicate name, so a predicate name does not
+collide with a Lisp function of the same name.
+
+
+Queries
+-------
+
+PQ solves a query and prints each solution.  It does not evaluate its
+arguments.  Several goals form a conjunction:
+
+	(PQ (PARENT TOM ?WHO))
+	(PQ (PARENT ?X ?Y) (PARENT ?Y ?Z))
+
+It prints one block per solution, giving every variable of the query,
+and returns the number of solutions -- or prints NO and returns NIL when
+there are none.
+
+PQUERY is the programmatic form.  It takes an evaluated list of goals and
+an optional depth override, and returns a list of binding lists, one per
+solution:
+
+	(PQUERY '((PARENT TOM ?WHO)) NIL)
+
+PINST instantiates a term against one of those binding lists, which is
+how a program reads an answer out:
+
+	(PINST '?WHO (CAR (PQUERY '((PARENT TOM ?WHO)) NIL)))
+
+
+Built-in predicates
+-------------------
+
+	(TRUE)			succeeds once
+	(FAIL)			always fails
+	!			cut -- see below
+	(= ?X TERM)		succeeds if ?X unifies with TERM
+	(NOT GOAL ...)		succeeds if GOAL ... has no solution
+	(IS ?X FORM)		evaluates FORM as Lisp, unifies with ?X
+	(LISP FORM)		evaluates FORM as Lisp, succeeds if non-NIL
+
+IS and LISP instantiate the form first, so the variables of the query
+appear in it as their values:
+
+	(<- (FACT 0 1) !)
+	(<- (FACT ?N ?F) (LISP (GREATERP ?N 0))
+			 (IS ?M (SUB1 ?N))
+			 (FACT ?M ?G)
+			 (IS ?F (TIMES ?N ?G)))
+	(PQ (FACT 6 ?F))		?F = 720
+
+If any variable in the form is still unbound when the goal is reached,
+the goal fails rather than calling EVAL on an unbound variable.
+
+These names are reserved: a clause whose head names a built-in is
+refused.  The list is in *PBUILTINS*.
+
+
+Cut
+---
+
+! commits to the clause it appears in.  On backtracking it discards the
+remaining clauses of its own predicate AND the remaining solutions of the
+goals to its left in the same body.  The usual idiom works:
+
+	(<- (MAX ?X ?Y ?X) (LISP (NULL (LESSP ?X ?Y))) !)
+	(<- (MAX ?X ?Y ?Y))
+	(PQ (MAX 5 3 ?M))		?M = 5, one solution
+
+Without the cut the second clause would also match and offer ?M = 3.
+
+
+Database
+--------
+
+	(PLISTING)		print every clause
+	(PLISTING 'ANC)		print one predicate
+	(PCLEAR 'ANC)		erase one predicate
+	(PCLEAR)		erase everything
+
+PLISTING prints each clause in the form you would type to assert it.
+*PPREDS* is the list of predicates that currently have clauses.
+
+
+Limits
+------
+
+The solver is depth first and collects every solution it finds, so an
+unbounded search would not return.  Two globals bound it:
+
+	*PDEPTH*	resolution steps allowed on one branch (default 40)
+	*PMAX*		solutions collected before stopping    (default 100)
+
+Either may be set to NIL to disable it, which is only safe for a program
+known to terminate.  When a limit is what stopped the search, PQ says so,
+so a short answer is never silently mistaken for a complete one.
+
+*PDEPTH* defaults to 40 because each resolution step is a level of Lisp
+recursion, and the default parameter stack overflows at about 60.  A
+larger stack raises the ceiling in proportion:
+
+	lispf4 -s 40000 basic.img		then (SETQ *PDEPTH* 500)
+
+Raising *PDEPTH* without also raising the stack will overflow it.
+
+Unification has no occurs check, which is standard Prolog practice.
+Unifying ?X with a term containing ?X builds a circular structure, and
+printing it will not terminate.
+
+
+Known defect
+------------
+
+Under sustained cell garbage collection, a query occasionally returns a
+wrong answer.  Measured on a REV of a six element list repeated in a
+loop, roughly one query in 150 to 300 comes back with a variable left
+unbound that should have been bound, or with the wrong number of
+solutions.  To reproduce, run that query a few hundred times and compare
+each answer against the known result.
+
+What is established about it:
+
+  - It happens only when the cell collector runs.  Given enough cell
+    space that no collection occurs, several hundred consecutive queries
+    are all correct.  Failures become more frequent as cell space is
+    reduced and collections become more frequent.
+  - It is deterministic.  For a fixed cell space the same iteration
+    fails on every run, including under AddressSanitizer.
+  - AddressSanitizer and UndefinedBehaviorSanitizer report nothing, so
+    it is not an out of bounds access in the C code.
+  - The clause database is not damaged; it compares equal to its
+    expected value at every iteration, including the failing one.
+
+Ruled out as the cause: the loop construct used to drive the test (a
+PROG/GO loop, RPTQ, and a recursive driver all show it), APPEND (4000
+iterations across 9 collections are clean), interning of renamed
+variables (the failure predates and survives the change to allocate
+conses instead), the depth limit (REV of six elements needs 28 steps
+against a limit of 40), and generic deep recursion with consing.
+
+The cause has not been isolated, and whether it is a fault in this
+package or in the interpreter's cell collector is not yet known.  Until
+it is, treat a single answer from a long-running search as needing
+confirmation.  Running with more cell space, for example
+
+	lispf4 -c 1000000 basic.img
+
+makes collections rarer and so makes the fault rarer, but does not
+remove it.
+
+
+Relationship to prolog.lisp
+---------------------------
+
+prolog.lisp is an older, unrelated experiment: a structure-sharing Prolog
+in the style of the early Edinburgh implementations, using molecules and
+an explicit record heap.  It has never been complete in this repository.
+The source is truncated -- SEEK ends mid-COND, in the initial commit as
+well as every commit since -- and it contains no clause database and no
+way to assert a clause, so no query can succeed.  Its primitives
+(MAKHUNK, MAKRECORD, ALLOCATE, IMM, SETIMM) do work, and POP, PUSH and
+TRANSFER have been corrected, but the interpreter proper cannot be
+recovered from what survives.
+
+prolog2.lisp was written to provide the functionality, not to guess at
+the missing code.  prolog.lisp is left as it stands.

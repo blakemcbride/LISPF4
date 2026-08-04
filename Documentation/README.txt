@@ -78,6 +78,7 @@ README.txt
 UsersGuide.txt
 DevelopmentProcess.txt
 ImplementationGuide.txt
+prolog2.txt
 Haraldson-LISP_details.pdf
 Interlisp-Oct_1978.pdf
 p501-schorr.pdf
