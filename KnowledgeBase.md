@@ -77,7 +77,13 @@ it return wrong characters, which silently misclassified atoms for any caller of
 | `ifdo.lisp` | IF/DO WHILE/DO FOR package |
 | `match.lisp` | Pattern matching package (required by ifdo.lisp, struct.lisp) |
 | `struct.lisp` | Named data structures package |
-| `prolog.lisp` | **Experimental / incomplete.** `SEEK`'s compound-goal `COND` clause is truncated in the source, so resolution does not run. Mechanical defects (undefined `MEMQ`/`FUNCALL`, non-mutating `POP`/`PUSH`) were fixed 2026-08-04; the missing logic was not invented. See `Bugs2.md` L4. |
+| `astruct.lisp` | Association-list structure package - `A*` functions paralleling struct's `S*`. Despite the name it uses no arrays; `AMAKE` builds nested `CONS` pairs |
+| `quote.lisp` | Macro-quote / skeleton building (`MQUOTE`, `MQ`, `COMBINE-SKELS`, `ISCONST`) |
+| `static.lisp` | Static (persistent) variables: `CREATE-STATIC`, `ADD-STATIC`, `GET-STATIC`, `SAVE-STATIC`, `DELETE-STATIC` |
+| `printa.lisp` | Array printing |
+| `schum.lisp` | "SCHUM programming system" - an explicit-control evaluator for a Scheme-like language: `SEVAL`/`SCHAPPLY` driven by a `**PC**` register, with closures, environments and frames |
+| `prolog2.lisp` | **Prolog interpreter.** Self-contained, works. See *PROLOG2 package* below and `Documentation/prolog2.txt`. |
+| `prolog.lisp` | **Experimental / incomplete - superseded by `prolog2.lisp`.** `SEEK`'s compound-goal `COND` clause is truncated in the source (in the initial commit and every commit since), and there is no clause database and no way to assert a clause, so no query can succeed. Mechanical defects (undefined `MEMQ`/`FUNCALL`, non-mutating `POP`/`PUSH`/`TRANSFER`) were fixed 2026-08-04; the missing logic was not invented, because it is not recoverable from git history and no upstream copy was found. Its primitives (`MAKHUNK`, `MAKRECORD`, `ALLOCATE`, `IMM`, `SETIMM`) do work, though `SETIMM` at index 0 is a no-op since `NTH[x;0]` returns `cons[NIL;x]`. |
 
 ### Build Files
 
@@ -313,6 +319,86 @@ Regression tests: `tests/cases/unpack-gc.sh` (direct) and
 - **Structure editor**: `(EDITF funcname)` - edit function definitions interactively
 - **Package system**: group functions via CURFILE, save/load with MAKEFILE/LOAD
 - **Image save/load**: `(SYSOUT "file.img")` / `(SYSIN "file.img")`
+
+---
+
+## PROLOG2 package (`prolog2.lisp`)
+
+A self-contained Prolog interpreter, added 2026-08-04. New code, not a repair of
+`prolog.lisp` — the two share no code and no names and can both be loaded at once.
+Needs nothing but the base system: `(READFILE "prolog2.lisp")`. User-facing
+documentation is `Documentation/prolog2.txt`; this section covers the internals.
+
+### Representation
+
+| Thing | Encoding |
+|---|---|
+| Term | An ordinary S-expression, so a Prolog list *is* a Lisp list and `(?H . ?T)` is the head/tail pattern |
+| Source variable | An atom whose print name starts with `?` — `?X`, `?ANSWER` |
+| Renamed variable | A **fresh cons** `(?V . ?X)`, unique by `EQ`, `CDR` = the original name |
+| Clause | `(head . body)`; a fact has an empty body |
+| Database | The `PCLAUSES` property of the predicate atom, so predicate names never collide with Lisp functions — a predicate may be called `=` |
+| Bindings | An association list of `(variable . term)`. `NIL` is the *empty* binding, so failure must be distinct: the atom **`PFAIL`** |
+
+`ASSOC` compares with `EQ` (verified: `(ASSOC '(A) (LIST (CONS '(A) 1)))` → `NIL`),
+which is what makes the fresh-cons variable work.
+
+**Renaming allocates conses rather than interning `PACK`ed atoms.** The first version
+built `?X-17` with `PACK`; that consumes one atom per variable per resolution step and
+exhausts atom space. `PRENAME` binds `*PMAP*` and maps each distinct source variable of
+one clause to one fresh cons, so all its occurrences stay `EQ`.
+
+### Solver
+
+`PSOLVE`/`PSOLVE1` are depth-first and return a **list of binding lists**, one per
+solution — not a continuation or coroutine, since LISPF4 has no lexical closures to
+build one from. `PSOLVE1` resolves a goal against each clause of its predicate,
+replacing the goal by that clause's body ahead of the remaining goals.
+
+**Cut** is real, not clause-local. `PRENAME` rewrites `!` in the body into `(CUT tag)`,
+where `tag` identifies the `PSOLVE1` invocation. Executing `(CUT tag)` solves the *rest*
+first and sets `*PCUT*` on the way back out — so it prunes on backtracking, not on the
+way in. Each `PSOLVE1` stops its clause loop whenever `*PCUT*` is set, and clears it
+only if the tag is its own. That is the standard cut barrier: it discards both the
+remaining clauses of its own predicate and the alternatives of goals to its left.
+
+Built-ins are dispatched in `PBUILTIN` before any clause lookup; the reserved names are
+in `*PBUILTINS*` = `(CUT TRUE FAIL = NOT IS LISP)`, and `PASSERT` refuses a clause whose
+head names one. `IS`/`LISP` instantiate first and fail rather than `EVAL` an unbound
+variable.
+
+### Globals
+
+| Variable | Purpose |
+|---|---|
+| `*PDEPTH*` | Resolution steps allowed on one branch (default 40) |
+| `*PMAX*` | Solutions collected before stopping (default 100) |
+| `*PDEEP*` | Set when a depth limit stopped a search — **must not be `PROG`-bound in `PQUERY`** or the flag is lost on return |
+| `*PCUT*` | Pending cut tag |
+| `*PGEN*` | Cut-tag counter, `PROG`-bound per query |
+| `*PCOUNT*` | Solutions so far, `PROG`-bound per query |
+| `*PMAP*` | Per-clause rename map, `PROG`-bound in `PRENAME` |
+| `*PPREDS*` | Predicates that currently have clauses |
+
+**`*PDEPTH*` defaults to 40 because each resolution step is a level of Lisp recursion**
+and the default parameter stack overflows near 60 (measured). `lispf4 -s 40000` raises
+the ceiling in proportion — depth 500 runs fine there. Raising `*PDEPTH*` without also
+raising the stack overflows it.
+
+### History: this package found a GC bug
+
+`PVARP` classifies a term by its first character, via `NTHCHAR` → `UNPACK`. No other
+package calls `UNPACK` in a tight loop over every term node, which is why prolog2
+exposed the collector/print-buffer collision described under **Garbage Collection** —
+a variable was occasionally judged not to be one, so no binding was made and it came
+back unbound, about once in 150–300 queries. Fixed in `garb_`.
+
+### Tests
+
+`tests/cases/prolog2.sh` covers unification, recursion, `APP` in both directions, cut,
+negation, arithmetic and the runaway guard. It is mutation-tested: disabling the cut
+rewrite, removing `NOT` from `*PBUILTINS*`, or removing the depth limit each makes it
+fail. `tests/cases/prolog2-gc.sh` runs one query 301 times under collection pressure.
 
 ---
 
