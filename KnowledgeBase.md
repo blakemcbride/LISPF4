@@ -30,6 +30,14 @@ is now `(integer *)` everywhere. Likewise the `SPECAT` statement function's `INT
 argument became a narrowing cast that misclassified ordinary values as strings/arrays; the
 comparison is now done at full width. **Do not reintroduce `shortint` in these paths.**
 
+### GC/printer collision (2026-08-04)
+
+`garb_()` printed its message through `b_1.prbuff` and assigned `b_1.prtpos`, the same
+buffer and cursor `UNPACK` uses while consing. A collection landing inside `UNPACK` made
+it return wrong characters, which silently misclassified atoms for any caller of
+`NTHCHAR`. Fixed by saving and restoring the printer state across `garb_()`. See
+**Garbage Collection** below for the details and the constraint it imposes.
+
 ---
 
 ## File Structure
@@ -267,6 +275,30 @@ Mark-and-sweep with compaction:
 - Compacting GC moves cells to eliminate fragmentation
 - Separate GC for big numbers and atoms (shared space)
 - GC statistics tracked in `a_1.garbs` (cell), `a_1.cgarbs` (compacting), `a_1.ngarbs` (bignum), `a_1.agarbs` (atom)
+
+**Roots for the mark phase (STEP 1), in order:** `jaan_1.jack[]`/`jaan_1.jill[]`
+up to `tops`; the registers `args[1..nargs]` (`ARG`..`I2CONS` — `#define args
+((integer *)&b_1.arg)`, and note `#define ires` aliases the same slot); the
+A-stack `b_1.stack[jp..nstack]`; every atom's car and cdr up to `natomp`; then
+arrays. A value held only in a C local across an allocation is *not* a root —
+`cons_()` protects just its own two arguments, by copying them into
+`i1cons`/`i2cons` in `garb0_()`.
+
+**`garb_()` must not disturb the printer.** It can be entered from any
+allocation, including one made from inside `UNPACK` (lispf41.c, `L12750`),
+which walks the shared print buffer `b_1.prbuff` backwards using `b_1.prtpos`
+as its cursor and conses a character atom at each step. The collector prints
+`--- GBC. Free cells =` through that same buffer and assigns `b_1.prtpos = 12`.
+Before the fix this destroyed `UNPACK`'s cursor and buffer whenever a
+collection landed inside it: `UNPACK` returned the wrong characters, and the
+atom's own print name was flushed into the middle of the collector's message.
+`garb_()` now saves `prtpos` and `prbuff` on entry, restores them at its single
+return, and blanks the buffer before printing rather than flushing it. Any new
+message added to `garb_()` inherits this protection; anything else that keeps
+state in `prbuff`/`prtpos` across an allocation needs the same care.
+Regression tests: `tests/cases/unpack-gc.sh` (direct) and
+`tests/cases/prolog2-gc.sh` (via `PVARP`, which classifies terms with
+`NTHCHAR`).
 
 ---
 

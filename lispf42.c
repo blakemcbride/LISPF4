@@ -3376,6 +3376,8 @@ integer garb_(integer *gbctyp)
     extern /* Subroutine */ int rehash_(void), terpri_(void), priint_(integer 
 	    *);
     static integer ich, len, ipl, max__, njp, ret, ind1, ind2;
+#define SAV_PRBUFLEN ((integer)(sizeof b_1.prbuff / sizeof b_1.prbuff[0]))
+    integer sav_prtpos, sav_i, sav_prbuff[sizeof b_1.prbuff / sizeof b_1.prbuff[0]];
 
 /* OMMON AND INTEGER DECLARATIONS */
 /* OMMON AND INTEGER DECLARATIONS END */
@@ -3409,6 +3411,21 @@ integer garb_(integer *gbctyp)
 /*         MAKE FREE LIST */
 /*         GBCTYP = 3: REHASH ALL SAVED ATOMS */
 /*         RETURN */
+
+/*             SAVE THE PRINTER'S STATE. */
+
+/*       A GARB CAN BE TRIGGERED BY ANY ALLOCATION, INCLUDING ONE MADE */
+/*       FROM INSIDE UNPACK, WHICH WALKS PRBUFF BACKWARDS USING PRTPOS */
+/*       AS ITS CURSOR AND CONSES AS IT GOES.  BOTH MESSAGE SITES BELOW */
+/*       PRINT THROUGH PRBUFF, AND THE EPILOGUE ASSIGNS PRTPOS, SO A */
+/*       COLLECTION LANDING INSIDE UNPACK USED TO DESTROY ITS CURSOR AND */
+/*       ITS BUFFER -- UNPACK THEN RETURNED A WRONG ANSWER.  THE */
+/*       COLLECTOR MUST BE TRANSPARENT TO THE PRINTER, SO SAVE BOTH HERE */
+/*       AND RESTORE THEM AT THE RETURN. */
+    sav_prtpos = b_1.prtpos;
+    for (sav_i = 0; sav_i < SAV_PRBUFLEN; ++sav_i) {
+	sav_prbuff[sav_i] = b_1.prbuff[sav_i];
+    }
 
 /* STEP 1: */
 
@@ -4025,6 +4042,15 @@ L800:
     if (b_1.dreg[0] == b_1.nil || b_1.iflg2 != b_1.nil) {
 	goto L801;
     }
+/*      PUT THE MESSAGE ON A LINE OF ITS OWN.  PRBUFF HOLDS EITHER */
+/*      PENDING OUTPUT OR UNPACK'S SCRATCH DATA, AND NEITHER IS OURS TO */
+/*      EMIT -- FLUSHING IT HERE USED TO SPRAY AN ATOM'S PRINT NAME INTO */
+/*      THE MIDDLE OF THE MESSAGE.  CLEAR IT INSTEAD; IT IS PUT BACK AT */
+/*      THE RETURN, SO PENDING OUTPUT FINISHES ITS LINE AFTERWARDS. */
+    for (sav_i = 0; sav_i < SAV_PRBUFLEN; ++sav_i) {
+	b_1.prbuff[sav_i] = chars_1.space;
+    }
+    b_1.prtpos = b_1.lmarg;
     terpri_();
     mess_(&messnr);
     i__ = b_1.lunut;
@@ -4049,9 +4075,16 @@ L801:
 /*     CALL LSPEX */
 
 L802:
+/*             RESTORE THE PRINTER'S STATE.  SEE THE NOTE AT THE SAVE. */
+    for (sav_i = 0; sav_i < SAV_PRBUFLEN; ++sav_i) {
+	b_1.prbuff[sav_i] = sav_prbuff[sav_i];
+    }
+    b_1.prtpos = sav_prtpos;
     ret_val = isum;
     return ret_val;
 } /* garb_ */
+
+#undef SAV_PRBUFLEN
 
 #undef ipname
 #undef jpname

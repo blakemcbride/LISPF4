@@ -1,23 +1,22 @@
 # prolog2 under cell GC pressure: every answer must be the right answer.
 #
-# KNOWN FAILURE -- see "Known defect" in Documentation/prolog2.txt.
+# This was a known failure.  The cause was in the interpreter, not in prolog2:
+# UNPACK walks the shared print buffer and conses as it goes, and a collection
+# landing inside it destroyed its cursor -- see tests/cases/unpack-gc.sh and
+# the note in garb_.  PVARP classifies a term by its first character, so a
+# corrupted UNPACK made it answer "not a variable" for a variable, no binding
+# was made, and the variable came back unbound.
 #
 # The same query is run 301 times.  It is a pure function of a database that
-# never changes, so all 301 answers must be identical and correct.  A few are
-# not: a variable comes back unbound that should have been bound.  It happens
-# only when the cell collector runs -- with enough cell space that no
-# collection occurs, every answer is correct -- and it is deterministic, the
-# same iterations failing on every run.
+# never changes, so all 301 answers must be identical and correct.
 #
 # The loop is written with PROG/GO rather than a package iterator so that the
 # only things under test are the base interpreter and prolog2.lisp.
 #
-# Do not tidy the driver.  Which iterations fail depends on the exact heap
-# state, so cosmetic changes -- even returning a shorter value from SWEEP --
-# shift the collections and can hide the fault entirely.  This wording is one
-# that reproduces it.
-#
-# When this starts passing the run reports XPASS; delete the .bug file then.
+# Do not tidy the driver.  Which iterations collected depended on the exact
+# heap state, so cosmetic changes -- even returning a shorter value from
+# SWEEP -- shifted the collections and could hide the fault entirely.  This
+# wording is one that reproduced it.
 
 [ -x "$LISPF4" ] || { echo "interpreter $LISPF4 is not executable"; exit 1; }
 
