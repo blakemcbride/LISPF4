@@ -8,7 +8,7 @@
 [PUTD 'READFILE
       '(LAMBDA (FILE)
                (PROG (&&X LFN TEMP)
-                     (OR (SETQ LFN (XCALL 1 (LIST 15 FILE 'OLD 'FORMATTED)))
+                     (OR (SETQ LFN (OPEN0 FILE T NIL))
                          (RETURN))
                      (SETQ TEMP (IOTAB 1 LFN))
                 LOOP (SELECTQ (SETQ &&X (READ))

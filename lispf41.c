@@ -1205,7 +1205,11 @@ L2400:
     b_1.arg2 = cons_(&i__1, &b_1.arg2);
     b_1.arg = b_1.error;
     b_1.ibreak = FALSE_;
-    b_1.lmarg = 1;
+/*   H2: THIS USED TO SET LMARG = 1 SO THE DIAGNOSTIC STARTED IN COLUMN 1, AND  */
+/*   NEVER PUT IT BACK -- SO ANY ERROR, INCLUDING ONE AN NLSETQ CAUGHT AND THE  */
+/*   PROGRAM NEVER SAW, SILENTLY DISCARDED THE LEFT PRINT MARGIN THE PROGRAM    */
+/*   HAD SET WITH (IOTAB 7 N).  SYSERROR NOW SETS AND RESTORES THE MARGIN       */
+/*   AROUND ITS OWN PRINTING INSTEAD, THE WAY PRIN1 ALREADY DOES.               */
     goto L1500;
 /*       CALL APPLY(SYSERROR, (ERRTYP L ARG FORM)) */
 
@@ -2050,17 +2054,22 @@ L11355:
     if (b_1.arg > a_1.natom) {
 	goto L3090;
     }
-    ii = b_1.arg;
+/*   H3: HOLD THE ARGUMENT IN A REGISTER THE COLLECTOR RELOCATES, NOT IN A C   */
+/*   LOCAL.  THE MATOM BELOW CAN MOVE ATOMS, AND IRES ALIASES ARG, SO BY THE   */
+/*   TIME GETPN RUNS THE C COPY NAMED AN INDEX THAT NO LONGER MEANT ANYTHING   */
+/*   -- MEASURED AT 1374 WHILE NATOMP HAD DROPPED TO 1078.  TEMP1 IS FREE HERE */
+/*   AND IS A GC ROOT.                                                        */
+    b_1.temp1 = b_1.arg;
     i__2 = prompt_1.prolen;
     for (i__ = 1; i__ <= i__2 || i__ == 1; ++i__) {
 /* L11356: */
 	b_1.abuff[i__ - 1] = prompt_1.protxt[i__ - 1];
     }
     *ires = matom_(&prompt_1.prolen);
-    if (ii == b_1.nil) {
+    if (b_1.temp1 == b_1.nil) {
 	goto L998;
     }
-    i__ = getpn_(&ii, &main, &jb, &prompt_1.prolen);
+    i__ = getpn_(&b_1.temp1, &main, &jb, &prompt_1.prolen);
     if (prompt_1.prolen > 80) {
 	prompt_1.prolen = 80;
     }
@@ -2970,6 +2979,14 @@ L12690:
     *ires = matom_(&i__1);
     if (*ires == b_1.nil || i__ == 0) {
 	goto L998;
+    }
+/*   H3: RE-FETCH.  THE MATOM ABOVE CAN RUN THE ATOM-COMPACTING COLLECTOR,     */
+/*   WHICH MOVES PRINT NAMES, SO THE JB TAKEN BEFORE IT IS AN OFFSET INTO THE  */
+/*   OLD LAYOUT.  IT HAPPENED TO STILL READ THE RIGHT BYTE ONLY BECAUSE STEP 4 */
+/*   COMPACTS DOWNWARD AND LEAVES WHAT IT VACATES INTACT.  SUBSTRING, TWENTY   */
+/*   LINES DOWN, ALREADY DOES IT THIS WAY.                                    */
+    if (0 > getpn_(&b_1.arg2, &main, &jb, &ipl)) {
+	goto L25010;
     }
     getch_(b_1.pname, &ich, &jb);
     i__1 = i__;

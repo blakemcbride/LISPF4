@@ -36,6 +36,14 @@ int     f4_reset_ready = 0;
 
 #define ROLLMAGIC	((integer) 0x4C463441)	/*  "LF4A"  */
 
+/*  Fixed part of PRIN1's per-call node budget -- see the H1 comment there.
+    PRINTLEVEL and PRINTLENGTH bound the shape of the printed image but not
+    its total size; this bounds the size.  It is deliberately far larger than
+    any structure the default 100 000 cons cells can hold without sharing, so
+    only a cycle or heavy sharing can reach it.  */
+
+#define PRNODES		((integer) 100000)
+
 /*  Non-zero while INIT2 is reading SYSATOMS.  End-of-file there always means
     a truncated or corrupt SYSATOMS, but SHIFT's normal reaction to EOF on a
     non-terminal unit is to switch the reader back to LUNINS and carry on --
@@ -1991,7 +1999,7 @@ static integer reloc_(integer v, integer nfrepo, integer nfreto,
 	    integer *, integer *, integer *);
     static integer ic, li, gllbef, xx, glcoun, levelm;
     extern /* Subroutine */ int terpri_(void);
-    static integer ldepth, lprbrk, llmarg;
+    static integer ldepth, lprbrk, llmarg, glnode, glbudg;
     extern /* Subroutine */ int prinat_(integer *, integer *, integer *);
     extern integer get_(integer *, integer *);
 
@@ -2017,6 +2025,25 @@ static integer reloc_(integer v, integer nfrepo, integer nfreto,
     levelm = (b_1.jp - b_1.ip) / idiv - 1;
     if (b_1.levelp < levelm) {
 	levelm = b_1.levelp;
+    }
+/*   H1: PRINTLEVEL bounds the depth of the image and PRINTLENGTH the length   */
+/*   of each level, but nothing bounds their product.  A structure circular     */
+/*   through *both* CAR and CDR runs away in both directions at once and emits  */
+/*   on the order of PRINTLENGTH ** PRINTLEVEL nodes -- 1000 ** 1000 at the     */
+/*   defaults -- so (TCONC X X) wrote 809 MB in three seconds and only an       */
+/*   interrupt stopped it.  Give the whole call a node budget as well.  It is   */
+/*   the larger of a fixed allowance and either limit, so it can never bite     */
+/*   before the limit that already bounds a shape does:  a CDR-circular list    */
+/*   still stops at PRINTLENGTH, a CAR-circular one at PRINTLEVEL, and small    */
+/*   explicit limits (PRINTLEVEL 3 / PRINTLENGTH 3) are untouched.  Running     */
+/*   out prints the same "---" the length limit prints, and unwinds.            */
+    glnode = 0;
+    glbudg = PRNODES;
+    if (b_1.levell > glbudg) {
+	glbudg = b_1.levell;
+    }
+    if (levelm > glbudg) {
+	glbudg = levelm;
     }
     jpold = b_1.jp;
     gllev = 0;
@@ -2194,6 +2221,8 @@ L1591:
 
 /* --FROM UNKWOTE                        DEEP ENOUGH ? */
 L2000:
+/*                                      H1: ONE MORE ITEM AGAINST THE BUDGET */
+    ++glnode;
     if (gllev >= levelm && (x > a_1.natom && x <= a_1.nfreet)) {
 	x = -1;
     }
@@ -2480,7 +2509,7 @@ L5130:
     goto L5160;
 /*                                      LIST IS NEXT */
 L5150:
-    if (li < b_1.levell) {
+    if (li < b_1.levell && glnode < glbudg) {
 	goto L5100;
     }
     x = -2;

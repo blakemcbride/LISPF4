@@ -12,25 +12,71 @@
   [LAMBDA ARGS
           (COND (((SUBR . EQUAL) 1 ((SUBR . LENGTH) ARGS))
                   ((SUBR . DIFFERENCE) 0 ((SUBR . CAR) ARGS)))
-                (T ((SUBR . APPLY) '(SUBR . DIFFERENCE) ARGS])
+                (T (PROG ((DIFFX ((SUBR . CAR) ARGS)))
+                         (SETQ ARGS ((SUBR . CDR) ARGS))
+                    LP   (COND (((SUBR . NULL) ARGS) (RETURN DIFFX)))
+                         (SETQ DIFFX ((SUBR . DIFFERENCE) DIFFX ((SUBR . CAR) ARGS)))
+                         (SETQ ARGS ((SUBR . CDR) ARGS))
+                         (GO LP])
   
 (/
-  (SUBR . QUOTIENT))
+  [LAMBDA ARGS
+          (PROG ((QUOTX ((SUBR . CAR) ARGS)))
+                (SETQ ARGS ((SUBR . CDR) ARGS))
+           LP   (COND (((SUBR . NULL) ARGS) (RETURN QUOTX)))
+                (SETQ QUOTX ((SUBR . QUOTIENT) QUOTX ((SUBR . CAR) ARGS)))
+                (SETQ ARGS ((SUBR . CDR) ARGS))
+                (GO LP])
   
 (<
-  (SUBR . LESSP))
+  [LAMBDA ARGS
+          (PROG NIL
+           LP   (COND (((SUBR . NULL) ((SUBR . CDR) ARGS)) (RETURN T))
+                      (((SUBR . NULL) ((SUBR . LESSP) ((SUBR . CAR) ARGS)
+                                                      ((SUBR . CADR) ARGS)))
+                        (RETURN NIL)))
+                (SETQ ARGS ((SUBR . CDR) ARGS))
+                (GO LP])
   
 (<=
-  (LAMBDA (A B) ((SUBR . NULL) ((SUBR . GREATERP) A B))))
+  [LAMBDA ARGS
+          (PROG NIL
+           LP   (COND (((SUBR . NULL) ((SUBR . CDR) ARGS)) (RETURN T))
+                      (((SUBR . GREATERP) ((SUBR . CAR) ARGS)
+                                          ((SUBR . CADR) ARGS))
+                        (RETURN NIL)))
+                (SETQ ARGS ((SUBR . CDR) ARGS))
+                (GO LP])
   
 (=
-  (SUBR . EQUAL))
+  [LAMBDA ARGS
+          (PROG NIL
+           LP   (COND (((SUBR . NULL) ((SUBR . CDR) ARGS)) (RETURN T))
+                      (((SUBR . NULL) ((SUBR . EQUAL) ((SUBR . CAR) ARGS)
+                                                      ((SUBR . CADR) ARGS)))
+                        (RETURN NIL)))
+                (SETQ ARGS ((SUBR . CDR) ARGS))
+                (GO LP])
   
 (>
-  (SUBR . GREATERP))
+  [LAMBDA ARGS
+          (PROG NIL
+           LP   (COND (((SUBR . NULL) ((SUBR . CDR) ARGS)) (RETURN T))
+                      (((SUBR . NULL) ((SUBR . GREATERP) ((SUBR . CAR) ARGS)
+                                                         ((SUBR . CADR) ARGS)))
+                        (RETURN NIL)))
+                (SETQ ARGS ((SUBR . CDR) ARGS))
+                (GO LP])
   
 (>=
-  (LAMBDA (A B) ((SUBR . NULL) ((SUBR . LESSP) A B))))
+  [LAMBDA ARGS
+          (PROG NIL
+           LP   (COND (((SUBR . NULL) ((SUBR . CDR) ARGS)) (RETURN T))
+                      (((SUBR . LESSP) ((SUBR . CAR) ARGS)
+                                       ((SUBR . CADR) ARGS))
+                        (RETURN NIL)))
+                (SETQ ARGS ((SUBR . CDR) ARGS))
+                (GO LP])
   
 (ABS
   (LAMBDA (X) (TIMES X (SIGN X))))

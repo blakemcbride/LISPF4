@@ -226,6 +226,74 @@ worth carrying forward:
   is now recorded in the global `LASTERRORN` with `SETTOPVAL` (F7); and `ADDINNAME` tested
   a free `FN` instead of its own parameter `F` (F9).
 
+### Fifth bug-fix pass (2026-08-27)
+
+See `Bugs5.md` (H1-H5). The themes worth carrying forward:
+
+- **Two limits that each bound one axis do not bound the area.** `PRIN1` bounds depth
+  with `PRINTLEVEL` (at `L2000`, printing `...`) and the length of each level with
+  `PRINTLENGTH` (at `L5150`, printing `---`). Each is correct on its own, and a
+  structure circular through CAR alone or CDR alone is bounded by one of them. A
+  structure circular through *both* runs away in both directions at once and emits on
+  the order of `PRINTLENGTH ** PRINTLEVEL` nodes -- 1000 ** 1000 at the defaults -- so
+  `(TCONC X X)`, which leaves `P = (B . B)` with `B = (P)`, printed 809 MB in three
+  seconds (H1). The same shape comes out of `LCONC`, `RPLNODE`, `EDSMASH`, `PUTPROP`,
+  `ADDPROP`, `LISTPUT`, `LISTPUT1` and `PUTASSOC` given the same deep list twice, and
+  out of any `RPLACA`/`RPLACD` pair that closes a cycle both ways. `PRIN1` now also
+  carries a per-call node budget (`GLNODE` against `GLBUDG`), reset at the main entry,
+  counted at `L2000` and tested beside the length limit at `L5150`. The budget is
+  `max(PRNODES, PRINTLENGTH, PRINTLEVEL)` with `PRNODES = 100000` -- roughly the default
+  cons-cell count, so nothing an acyclic *unshared* structure can hold reaches it, and
+  neither limit can be pre-empted by it on the shape it already bounds. Running out
+  prints the same `---` and unwinds, which costs O(depth) more nodes. What is *not*
+  fixed: there is no cycle detection, so heavily shared acyclic structure (`Xn = (Xn-1
+  Xn-1)`) is still truncated rather than printed, and `LASTDEPTH` (`L500`) remains
+  O(PRINTLEVEL x PRINTLENGTH) per call, which a structure both deep and long can still
+  make slow. Real cycle detection needs a fourth word per `PRIN1` frame -- the frame's
+  own node, which `L5110` overwrites with the tail -- and therefore a change to `IDIV`
+  and to the `APUSH3`/`APOP3` pair.
+- **A register the error path mutates has to be one the error path restores.** `L2400`
+  set `LMARG = 1` so the diagnostic started in column 1 and never put it back, so *any*
+  error -- including one `NLSETQ` caught and the program never saw -- silently discarded
+  the left print margin set with `(IOTAB 7 N)` (H2). The C assignment is gone; the Lisp
+  `SYSERROR` now brackets its own printing with `(IOTAB 7 1)` / `(IOTAB 7 old)`, which is
+  what `PRIN1` has always done for itself with its `APUSH2`/`APOP2` of `LMARG`. `MAKEFILE`
+  never showed the bug because `MAKEF-OUT` saves and restores `(IOTAB 7)` explicitly.
+  The other nine `IOTAB` entries and all seven `SYSFLAG` registers already survived an
+  error unchanged.
+- **A print-name offset or an atom index in a C local does not survive an allocation.**
+  `MATOM` can run `GARB(3)`, which compacts print names and moves atoms; a value held in
+  a COMMON register is relocated, a copy in a C local is not. `STRALLOC` took its
+  `GETPN` before the `MATOM` and read through the offset after it, and `PROMPTTEXT` held
+  its argument's atom index in `II` across the same call (H3). Both were provably stale
+  on every call and both still produced correct answers, because `GARB` STEP 4 compacts
+  *downward* and never erases what it vacates -- correct by accident, not by
+  construction. `STRALLOC` now re-fetches after the `MATOM`, as `SUBSTRING` twenty lines
+  below it already did, and `PROMPTTEXT` holds the argument in `TEMP1`, which is a GC
+  root. This is the same class as the `UNPACK` bug of 2026-08-04.
+- **A family of operators added as a set should agree about arity.** `basic2.lisp`
+  defines nine spellings; `+` and `*` were `PLUS`/`TIMES` (SUBRN, genuinely n-ary) while
+  `-`, `/`, `<`, `>`, `=`, `<=` and `>=` silently dropped everything past the second
+  argument, so `(< 1 3 2)` and `(= 1 1 2)` were both `T` (H4). The six comparisons now
+  chain -- `(< a b c)` is `(AND (< a b) (< b c))` -- and `-` and `/` fold left over any
+  number of arguments, `-` keeping its one-argument negate. Ignoring extra arguments to
+  a SUBR is system-wide InterLisp behaviour (`(CONS 1 2 3)` is `(1 . 2)`) and is not a
+  defect; these nine were a defect because they read as n-ary and only two were.
+- **A package that calls another package's functions has to say so.** `struct.lisp` and
+  `astruct.lisp` call `MATCH`/`LMATCH` from `match.lisp`; `prolog.lisp` and `printa.lisp`
+  are written with `DO` from `ifdo.lisp`, which itself needs `match.lisp`. Loading any of
+  them as documented gave "Undefined function" at first use (H5). Each now pulls what it
+  needs with `(OR (GETD 'MATCH) (READFILE "match.lisp") (PRINT "..."))`, placed **before**
+  its own `FILEHEADER`: `FILEHEADER` calls `CURFILE`, so a load placed after it would file
+  the package's own functions under the prerequisite's name. `MAKEFILE` does not write
+  these lines, so they have to be put back by hand if a package is ever regenerated.
+  Making that work needed one more fix: `READFILE` opened a fixed unit 15, and `F4_OPEN`
+  silently *closes and reuses* a unit that is already open -- so a `READFILE` inside a
+  `READFILE` did not fail, it pulled the outer file out from under the reader. `READFILE`
+  now asks `OPEN0` for a free unit, which is what `OPENF` has always done. `LOAD`
+  (`makef.lisp`) still takes unit 20 and is still not re-entrant; nesting goes through
+  `READFILE`.
+
 ---
 
 ## File Structure

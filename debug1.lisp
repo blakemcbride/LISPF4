@@ -171,12 +171,14 @@
                    (PRVARS1 (CDR VARS) (CDR VALS])
   
 (SYSERROR
-  (LAMBDA (ERRTYPE FN ARG FORM *BRKFLG)
+  (LAMBDA (ERRTYPE FN ARG FORM *BRKFLG SYSERRMARG)
           (SETTOPVAL 'LASTERRORN ERRTYPE)
-          [COND (ERRFLG (OUTUNIT
+          [COND (ERRFLG (SETQ SYSERRMARG (IOTAB 7 1))
+                        (OUTUNIT
                           (OUTUNIT T)
                           (ERRORMESS ERRTYPE)
-                          (PRIN2L-SP FN '- ARG]
+                          (PRIN2L-SP FN '- ARG))
+                        (IOTAB 7 SYSERRMARG]
           (GO* ERRORSET)
           (BREAK11 FORM T FN NIL T)))
   

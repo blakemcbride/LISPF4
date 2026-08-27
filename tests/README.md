@@ -38,7 +38,7 @@ Scratch output lands in `tests/.work/` (gitignored) — `NAME.out` is the raw se
 ## Expected result today
 
 ```
-passed: 72   failed: 0   known failures: 0   unexpected passes: 0
+passed: 78   failed: 0   known failures: 0   unexpected passes: 0
 ```
 
 Everything found so far is fixed, so there are no `.bug` markers left. The driver exits 0
@@ -138,7 +138,7 @@ Last run 2026-08-27, ASan + UBSan + `float-cast-overflow`, strict options. (GCC 
 `float-cast-overflow` out of the default `-fsanitize=undefined` set and it is what catches
 E16, so it is now in `DBGFLAGS`.) **No reports** from any of the following:
 
-- the full 55-case suite;
+- the full 78-case suite;
 - a sweep of every SUBR against 16 structurally malformed arguments and 8 malformed second
   arguments -- 12 528 forms. The same sweep finds 64 segfaults on the pre-fix binary;
 - 6 000 randomly generated nested forms over the builtin table, including dotted tails at
@@ -247,6 +247,42 @@ a bound -- and takes about a second.
 `e12-equal` covers what was fixed, not everything that is wrong: `EQUAL` still has no cycle
 detection, so the CDR-circular half of the case asserts only that SIGINT gets you out and
 the interpreter recovers.
+
+## H-series cases (fifth bug-fix pass, 2026-08-27)
+
+Six cases covering `Bugs5.md` H1-H5. Four are detectors and two are guards; the
+distinction matters, so it is spelled out per case. `KnowledgeBase.md` -> *Fifth bug-fix
+pass (2026-08-27)* explains the fixes.
+
+| Case | What it pins down | How it fails pre-fix |
+|---|---|---|
+| `h1-circprint` | the printer's total-output budget | `(TCONC X X)` never terminates; the case times out. Also prints a CDR-circular and a CAR-circular structure, which were already bounded and must stay so |
+| `h1-circlimits` | that `PRINTLEVEL`/`PRINTLENGTH` still mean what they meant | **guard** -- passes both sides. 3/3 on a doubly circular pair must still give exactly 27 leaves, so the new budget cannot be seen at small limits |
+| `h2-margin` | `(IOTAB 7 N)` surviving an error | the margin is 1 after `(NLSETQ (CAR 5))` and after `(ERSETQ (CAR 5))` |
+| `h3-stralloc` | `STRALLOC`/`PROMPTTEXT` across an atom-compacting collection | **guard** -- passes both sides. The offset really did go stale on every call, but `GARB` STEP 4 compacts downward and leaves the vacated bytes intact, so no wrong answer was ever produced. The case exists so that a later collector change that reuses or clears that region fails here instead of corrupting strings |
+| `h4-arity` | the nine operator wrappers in `basic2.lisp` | `(< 1 3 2)` and `(= 1 1 2)` are `T`, `(/ 100 5 2)` is 20, `(- 10 3 2)` is 7 |
+| `h5-packages` | the four packages that call another package's functions | `LOAD`ing or `READFILE`ing `struct`, `astruct`, `prolog` or `printa` alone gives "Undefined function" at first use |
+
+`h3-stralloc` asserts that the run actually collected -- the GBC tally's fourth number
+must not be 0. Without that check the case would pass trivially at a roomier `-a`/`-p`
+and prove nothing; it currently drives about a dozen atom-compacting collections at
+`-a2500 -p3000`.
+
+`h5-packages` is like the `L*` cases: the fix is partly in `.lisp` sources, which the
+shell case copies from `$ROOT`. Pointing it at the old interpreter alone shows only the
+`READFILE` half (a `READFILE` inside a `READFILE` used to take unit 15 out from under the
+outer read). To see the missing-dependency half fail, point `ROOT` at a pre-fix checkout
+as well:
+
+```sh
+git archive HEAD~1 | tar -x -C /tmp/prefix && (cd /tmp/prefix && make)
+LISPF4=/tmp/prefix/lispf4 LISPF4_IMG=/tmp/prefix/basic.img ROOT=/tmp/prefix \
+	sh tests/cases/h5-packages.sh
+```
+
+`h1-circprint` writes to a file rather than a pipe on purpose: against a pipe whose
+reader never fills, a runaway print looks like a hang instead of a size, and `wc -c`
+reports whatever the pipe happened to carry.
 
 ## Variance cases
 

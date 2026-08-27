@@ -93,7 +93,30 @@ F2C-derived idioms you must preserve when editing:
 
 `script.2` determines what lands in `basic.img`, in this order: `basic1.lisp` (via IOTAB redirect), then READFILE of `basic2 io1 func1 debug1 debug2 edit makef`, then LOAD of `history.lisp`, then `(CURFILE CUR)` and `(SYSOUT "basic.img")`. Order matters — later files redefine earlier ones (`history.lisp` redefines LISPX and READ).
 
-Not in `basic.img`, loadable on demand: `ifdo.lisp` (IF/DO WHILE/FOR, needs `match.lisp`), `match.lisp`, `struct.lisp`, `astruct.lisp`, `prolog.lisp`, `quote.lisp`, `static.lisp`, `printa.lisp`, `schum.lisp`.
+Not in `basic.img`, loadable on demand: `match.lisp`, `ifdo.lisp` (IF/DO WHILE/FOR),
+`struct.lisp`, `astruct.lisp`, `prolog.lisp`, `prolog2.lisp`, `quote.lisp`, `static.lisp`,
+`printa.lisp`, `schum.lisp`. Five of them need another package, and each now loads what it
+needs itself, in a line placed **before** its own `FILEHEADER` — `FILEHEADER` calls
+`CURFILE`, so a load after it would file the package's own functions under the
+prerequisite's name:
+
+| package | needs | why |
+|---|---|---|
+| `ifdo.lisp` | `match.lisp` | the pattern compiler calls `MATCH` |
+| `struct.lisp` | `match.lisp` | key lookup calls `MATCH`/`LMATCH` |
+| `astruct.lisp` | `match.lisp` | key lookup calls `MATCH`/`LMATCH` |
+| `prolog.lisp` | `ifdo.lisp` → `match.lisp` | written with `DO` |
+| `printa.lisp` | `ifdo.lisp` → `match.lisp` | `PRINTA1` is written with `DO` |
+
+`MAKEFILE` does not write those lines, so regenerating one of these packages drops its
+dependency — put it back by hand. `prolog2.lisp`, `match.lisp`, `quote.lisp`,
+`static.lisp` and `schum.lisp` are self-contained.
+
+`READFILE` (defined in `basic1.lisp`) asks `OPEN0` for a free unit rather than always
+taking 15, which is what makes a `READFILE` inside a `READFILE` work. It had to: `f4_open`
+silently closes and reuses a unit that is already open, so the fixed unit did not merely
+fail, it pulled the outer file out from under the reader. `LOAD` (`makef.lisp`) still
+takes unit 20 and is still not re-entrant, so nest through `READFILE`.
 
 `SYSATOMS` defines the builtin function tables read by `init2_()` during bare startup: seven SUBR groups (SUBR0, SUBR1, SUBR11, SUBR2, SUBR3, SUBRN, FSUBR), then individual atoms, then the numbered system messages. Atoms are created in file order, and the eval loop dispatches builtins by comparing an atom's index against the group boundary registers — so **adding or reordering entries shifts every subsequent builtin's dispatch group**. `SYSATOMS` is read only during `-x` startup; existing images carry their own atom table and will not pick up the change. Regenerate from the bottom: `make realclean && make`. `init2_()` now checks every read: a
 `SYSATOMS` that runs out mid-table, or whose message section is short of `MAXMES` lines,

@@ -1,0 +1,10 @@
+T
+SET
+20
+NIL
+20
+--- Illegal argument (subr1)
+CAR - 5
+NIL
+20
+RESTORED
