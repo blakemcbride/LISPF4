@@ -124,8 +124,9 @@ See `Bugs2.md`, findings E1-E19. The themes worth carrying forward:
 - **`EQUAL` notices A-stack overflow and polls the break flag.** `apush2_` signals
   overflow by leaving the marker 16 in the F-stack and restoring `JP`; `subpr_` and
   `prin1_` both test for it and `equal_` did not, so CAR-circular arguments span forever.
-  There is still no cycle detection: a CDR-circular comparison does not grow the stack at
-  all and still loops, but the SIGINT poll now makes it recoverable (E12).
+  There is still no cycle *detection*, but the work is bounded: a CDR-circular comparison
+  does not grow the stack at all, so it ran forever until a per-call node budget was added
+  (E12, then the seventh pass -- see below).
 - **`GARB` jumps to the reset point instead of calling `LISPF4` again.** The old
   `CALL LISPF4(2)` never returns, so every list-space exhaustion left one
   `cons_ -> garb_ -> lispf4_` chain on the C stack for the rest of the session -- about
@@ -290,9 +291,200 @@ See `Bugs5.md` (H1-H5). The themes worth carrying forward:
   Making that work needed one more fix: `READFILE` opened a fixed unit 15, and `F4_OPEN`
   silently *closes and reuses* a unit that is already open -- so a `READFILE` inside a
   `READFILE` did not fail, it pulled the outer file out from under the reader. `READFILE`
-  now asks `OPEN0` for a free unit, which is what `OPENF` has always done. `LOAD`
-  (`makef.lisp`) still takes unit 20 and is still not re-entrant; nesting goes through
-  `READFILE`.
+  now asks `OPEN0` for a free unit, which is what `OPENF` has always done. `LOAD` and
+  `MAKEFILE` (`makef.lisp`) both still took unit 20 after this pass and were fixed the
+  same way in the seventh; `SYSIN`/`SYSOUT` still take 30, and nothing nests them.
+
+### Sixth bug-fix pass (2026-08-27)
+
+See `Bugs6.md` (I1-I9). The themes worth carrying forward:
+
+- **A value cell that is also a type tag can be forged from Lisp.** A literal atom's CAR
+  is its value; an array is "an atom whose CAR is the marker atom `LISPF4-ARRAY`". Those
+  two sentences are the whole bug: `(SETQ ZQ 'LISPF4-ARRAY)` makes `ZQ` answer `ARRUTL`'s
+  type test, and `ZQ`'s print name -- the letters `Z` and `Q` -- is then decoded as an
+  array header (I1). Reads were survivable, because `ARRAYSIZE` merely answered nonsense;
+  the collector was not, because `GARB` STEP 6 *writes* through the `IND1`/`LEN` pair
+  `ARRUTL` hands back. `SYSOUT` segfaulted every time and left the target image **0 bytes
+  long** -- the only defect in six passes that destroys a file on disk -- and a bignum
+  collection, which runs by itself once float arithmetic fills the number area, reached it
+  with no `SYSOUT` at all. Fixed twice over, either half sufficient: `RPLACA` (which
+  `SETQ`, `SET`, `SETTOPVAL` and `RPAQ` all reach) refuses to store `ARRAY`, `STRING` or
+  `SUBSTR` into a *literal atom* -- a cons cell's CAR is not a type tag, so the `L12590`
+  entry is deliberately left alone -- and `ARRUTL` validates the header it decodes before
+  anything subscripts with it. `ARRUTL` action 3 is the single decoder for an array header
+  the way `GETPN` is for a print name (F1), so the one test covers `ELT`/`SETA`, `GARB`'s
+  mark and compact passes, and `MOVE`'s relocation on ROLLIN. Action 4 is excluded: it
+  *builds* the header as it goes, so its later words are legitimately unwritten. `NOBIND`
+  was deliberately **not** given the same treatment -- it is a value-cell sentinel, not a
+  type tag, forging it costs nothing but a variable that reads as unbound, and refusing it
+  would remove the only way to unbind one.
+- **The export format has to be a subset of the input format.** `PRINAT` split any printed
+  form wider than the right margin across a line break with nothing to mark the join, and
+  `MAKEFILE` is how work leaves an image (I2). A 78-character atom came back as two atoms;
+  a 77-character string came back **149** characters long, because the reader blank-pads
+  every input line out to the read margin and the padding landed inside the string. The
+  `+72` is exactly `150 - 78`, the gap between the two margins. The fix is "do not split":
+  a name that cannot be made to fit on any line is data, not layout, so it overruns the
+  right margin and stays readable. The wrap in the move loop at `L915` now fires at
+  `IOBUFF-4` (156) rather than at `MARG` (78) -- one column short of `L300`'s own limit, so
+  that when control returns there there is still room to write and the loop makes progress.
+  156 is above the 150-column read margin, so anything the reader can take in one line
+  round-trips. The alternative, a `%` continuation escape at end of line, was rejected: `%`
+  is the reader's escape character, `PRINAT` emits it as an escape immediately before the
+  character it escapes, and the move loop can wrap *between* the two -- so a continuation
+  marker planted after a dangling escape is read as an escaped `%` and both the marker and
+  the join are lost. Getting that right needs the wrap decision to be escape-aware, which
+  the move loop, copying bytes, is not.
+- **Everything a reset does not clear stays a GC root.** `L1` re-initialised the stacks and
+  cleared `FORM`, `ARG` and `ARG2` -- but not `ARG3`, `ALIST`, `TEMP1`, `TEMP2`, `TEMP3`,
+  `I1CONS` or `I2CONS`, all of which live in `ARGS(1..NARGS)` and are therefore scanned by
+  `GARB` STEP 1 (I3). `REVERSE` accumulates into `TEMP1`, so an exhaustion on a circular
+  list left `TEMP1` heading a chain holding every cell in the system; after the reset the
+  top loop's first `CONS` collected, got nothing back, reported `List space empty` and
+  reset into exactly the same state. 549 248 resets in 45 seconds, a megabyte of output a
+  second, immune to SIGINT, `kill -9` the only way out. Seven assignments at `L1` turn it
+  into one message and a usable prompt. The same exhaustion from a *bounded* source always
+  recovered, which is why it had never been seen. `TEMP3` is aliased as `BRSTK` by `RATOM`
+  and `IREAD`, both of which re-initialise it at entry, so clearing it there is safe.
+- **A poll in a callee is not a poll in the caller -- it can be worse than none.** E12 gave
+  `EQUAL` a break poll; twelve builtins that walk a spine with a bare `GOTO` still had
+  none, so a circular argument ran forever and ignored every SIGINT (I4). For `MEMBER` and
+  `SASSOC` the callee's poll actively *swallowed* the interrupt: `EQUAL` clears
+  `f4_break_pending`, sets `IBREAK` and returns `NIL`, which the caller read as "not this
+  element" and carried on -- so the first Ctrl-C was consumed and every later one met a
+  flag the previous iteration had already cleared. Eleven poll sites now exist in
+  `lispf41.c` (`LAST LENGTH REVERSE/APPEND ADDLIST MEMB MEMBER SASSOC ASSOC TAILP`) and two
+  in `lispf42.c` (`NCHARS` for `PACK`, `SUBPR` for `SUBPAIR`), and `MEMBER`, `SASSOC` and
+  `SUBPR` test `IBREAK` after each `EQUAL`. Two of those return through a caller rather
+  than jumping: `NCHARS` must let `12440` put `PRBUFF` and `PRTPOS` back first, and `SUBPR`
+  returns a value. Both test `IBREAK && ERRTYP == 26` rather than `IBREAK` alone --
+  `PRIN1` raises `IBREAK` from inside `NCHARS` for a bad substring and `CONS` raises it for
+  "space almost exhausted", and both of those have always been left to surface at the
+  calling Lisp function. Circular structure is not exotic here: `DOCOLLECT` builds one
+  deliberately as its accumulator.
+- **A C routine that pushes past `EVAL`'s margin has to give the space back itself.**
+  `EVAL` refuses to descend once the A-stack is within `MIDDL` slots of full, and that
+  margin is what leaves room for `SYSERROR` to run; `APUSH`/`FPUSH` stop only at 100%.
+  `PRIN1` compensates by bounding its own depth and `EQUAL` by restoring `JP` at `L60`;
+  `SUBPR` did neither (I5). Control reached `L25090` with the stack still full, `EVAL`
+  failed the margin test again, `MIDDL` halved five times and the session reset with **no
+  message at all** and nothing for `ERRORSET` to catch -- `(ERRORN)` afterwards was 1, not
+  12. `COPY` is `(SUBPAIR NIL NIL X)`, so 744 elements at the default `-s1500` was enough.
+  `SUBPR` now saves `IP` and `JP` at entry and restores both at `L90`, re-planting the
+  marker (16 or 17) at the entry F-stack top -- which is exactly what `FPUSH` already does
+  when the very first push fails, so the handler sees the same shape either way. Pass 3
+  listed `SUBPR` as handling A-stack overflow correctly; it does *notice* it, which was the
+  half being compared. It just could not report it.
+- **A file format's header being valid says nothing about its tables.** `ROLLIN` checked
+  the fifteen header words and `F4_READU` caught a short read, so a truncated image and a
+  text file were both refused -- and then every pointer in the tables was trusted (I6).
+  `REHASH` takes `JB` and `L` straight out of `PNP` and reads `PNAME` there, so one flipped
+  byte turned a print-name index into a multi-megabyte offset: 5 of 317 single-byte
+  corruptions of `basic.img` produced a SIGSEGV. The seven header pointers (`NATOPO`,
+  `NFREPO`, `JBPO`, `NUMBPO`, `NFRETO`, `NUMADO`, `NPNAMO`) are now checked **before**
+  anything is written, where `L90` still means "nothing was touched" and a Lisp-level
+  `(ROLLIN n)` can carry on; `PNP` (non-decreasing, inside the print-name area) and
+  `CAR`/`CDR` (never zero or negative outside a collection) are checked after the tables
+  are read, which has to stop the interpreter because there is no consistent state left --
+  the same problem and the same answer as the truncation case above it. The sweep goes from
+  311 loads / 1 refusal / 5 crashes to 236 / 81 / 0; the extra refusals are corruptions
+  that used to load into a quietly broken state. This matters beyond damaged files:
+  `ROLLIN` is callable from Lisp on any unit, and a `SYSOUT` onto a full disk leaves
+  exactly this kind of half-valid file.
+- **A one-character-per-type table cannot express case insensitivity.** `CHTAB` holds one
+  character per type and type 25 is `E`, so `1.5e3` was classified as an ordinary letter
+  and read as a literal atom; `MATOM` upshifts the token long after `RATOM` has decided it
+  is not a number, so the diagnostic even named `1.5E3` -- a form the reader accepts and
+  the printer produces (I7). `SHIFT` now lets a lowercase letter take its uppercase
+  counterpart's type when the upshift option is on (`DREG(4) = T`). Only the default type
+  10 is promoted, so a `CHTAB` entry deliberately set to a lowercase character still means
+  what it says. As shipped, `E` is the only entry this can reach: `%`, `~`, `#` and `"`
+  have no lowercase form, and `T` is type 10 already.
+- **Two adjacent error numbers, one of them wrong since the FORTRAN.** `MATOM` raised
+  `ERRTYP 28` -- `--- Array index out of bounds`, which is `ARRUTL`'s message -- when the
+  *atom table* came back nearly full from a compacting collection, while the very next line
+  already used 37, `--- Bignum/atom space almost exhausted`, for the byte half of the same
+  area (I8). Faithfully translated from `Lispf42.f:2311`. One line. `L56`, the hard-failure
+  exit, had the mirror-image problem -- it reported 33, `--- Atom space empty. NIL
+  returned`, whichever half had filled, so `CONCAT` at `-p9000` sent a user to `-a` when
+  the knob that mattered was `-p`; it now splits on `NALEFT`. The re-entry from `L30`,
+  which is taken with a 33 already pending and *before* `NALEFT`/`NBLEFT` have been
+  computed for this call, keeps its own label so it cannot read the stale counts.
+- `Documentation/UsersGuide.txt` documented `(SORT l)` and `(SET a j x)`; the functions are
+  `DSORT` (renamed, see the function reference below) and `SETA`. `SET` exists and assigns
+  to a variable, so a reader following the guide got a wrong answer rather than an
+  undefined-function error (I9). Of the 110 parenthesised names in the guide these two were
+  the only ones with no matching definition that are not editor commands, example names or
+  keywords.
+
+### Seventh bug-fix pass (2026-08-27)
+
+Not a new analysis: the leftovers that six passes had recorded as known and unfixed.
+
+- **A bounded traversal beats an unbounded one even without cycle detection.** E12 made
+  `EQUAL` notice `APUSH2`'s overflow marker, which bounds a CAR-circular comparison
+  because that one grows the A-stack. A CDR-circular pair pushes and pops in step, so the
+  stack never moves and the walk ran forever -- Ctrl-C got you out and nothing else did.
+  `EQUAL` now carries a per-call node budget, which is H1's answer for `PRIN1` applied to
+  the comparison, and reports running out **exactly as an A-stack overflow is reported**:
+  plant marker 16 in the F-stack and answer `NIL`. Both circular cases therefore give
+  `--- Stack overflow`, `ERRORSET` catches them, and no new system message was needed --
+  which matters, because `SYSATOMS` holds exactly `MAXMES` = 40 of them and `IMESS` is
+  sized for 40, so adding a 41st would change the image format. The budget is
+  `max(EQNODES, 100 * NFREET)` computed in `doublereal` and clamped to `MAXINT`, because
+  `-c` accepts 200 000 000 and a hundred times that does not fit an integer. At the
+  default `-c` it is ten million nodes, which the loop spends in about 20 ms. An
+  *unshared* comparison can visit no more nodes than there are cells in the system, so
+  only a cycle -- or sharing with a hundredfold blow-up, the same case `PRIN1` truncates
+  -- can reach it. `MEMBER`, `SASSOC` and `SUBPR` call `EQUAL` in a loop and now test the
+  marker after each call; without that they paid the whole budget once per element before
+  `999` got to report it. Inside `SUBPR` the F-stack top is always one of its own markers
+  1, 2 or 3, so "greater than 3" is the same test `L20` already makes.
+- **One fixed logical unit is one place two callers can collide.** H5 fixed this in
+  `READFILE` and stopped there; `LOAD` and `MAKEFILE` both still opened unit 20 by hand,
+  and `F4_OPEN` silently closes and reuses a unit that is already open. A file that
+  `LOAD`ed another file therefore loaded the inner one and then **silently dropped
+  everything after that line** -- no diagnostic, the outer `LOAD` simply stopped. Same for
+  a `MAKEFILE` called from inside a `LOAD`ed file. Both now ask `OPEN0` for a free unit.
+  `OPEN0` is also the more correct call on Windows, where it appends the `b` that
+  `XCALL`'s open only adds under `_WIN32`.
+- **A negative zero is not less than zero.** `PRIFLO`'s sign test was `dr < 0.`, which is
+  false for `-0.0`, so the minus was dropped and it printed `0.`. `RATOM` reads `-0.0`
+  correctly -- the F3 fix negates the zero it builds -- so the sign of zero was the one
+  float bit pattern that did not survive `PRINT`/`READ`, and therefore did not survive
+  `MAKEFILE`/`LOAD` either. The test is now `dr < 0. || signbit(dr)`, and the minus is
+  emitted before the value rejoins the zero path: `L3`'s normalisation loop multiplies by
+  ten until the value reaches 1, which a zero never does. `(ZEROP -0.0)` is still `T` and
+  `(MINUSP -0.0)` still `NIL`, which is what IEEE says.
+- **The atom table and the print-name bytes are two resources, not one.** See the I8 entry
+  above: `MATOM`'s hard-failure exit now says which half filled.
+- **`XCALL`'s four spine tests now agree.** Two used `NATOMP`, the size of the atom area
+  *in use*, where the boundary between an atom and a cons cell is `NATOM`, the size of the
+  area. The looser form admitted an unused atom slot, which is in bounds and so was
+  harmless -- but a reader comparing the four had no way to tell which was intended.
+
+Deliberately **not** changed, and why -- so a later pass does not re-litigate them:
+
+- **`PRIN1` still has no cycle detection.** Heavily shared acyclic structure
+  (`Xn = (Xn-1 Xn-1)`) is truncated rather than printed. Real detection needs a fourth
+  word per frame and therefore a change to `IDIV` and the `APUSH3`/`APOP3` pair; see the
+  H1 entry.
+- **A printed form wider than 156 columns still splits.** That is the print buffer, and it
+  is already above the 150-column read margin, so nothing the reader could take in one
+  line is affected. See the I2 entry.
+- **`IRESOL` stays at 8.** A float32 needs nine significant digits to be read back
+  exactly, so `1.0E-5` prints as `9.9999997E-6` -- which *is* the same float32 and does
+  round-trip. Raising it to 9 would make `0.1` print as `.100000001`, because the ninth
+  digit is where a float32's representation error lives. See the F2 entry.
+- **`(EQUAL 0 0.0)` is `T`.** `GTREAL` answers 0.0 for a small integer as its marker for
+  "not a float", and a float zero answers 0.0 as well. The arithmetic uses a real type
+  test (`v > BIGNUM`); `EQUAL` does not. See the F3 entry.
+- **The editor's `S` command stores under the `EDITVALUE` property, not as the atom's
+  value**, so `(EDITS x '(S FOO OK))` leaves `FOO` unbound. `US`, the only documented
+  consumer, reads the same property, so the pair is consistent.
+- **`SYSIN`/`SYSOUT` still take unit 30.** Neither nests inside the other, and neither
+  nests inside `LOAD`, which no longer takes a fixed unit.
 
 ---
 
@@ -487,6 +679,16 @@ b_1.pname     = calloc(NPNAME+2, sizeof(real));      // print names/strings/real
 - Print names stored separately in PNAME array, indexed via PNP array
 - Function definitions stored as LAMBDA/NLAMBDA expressions under the FNCELL property
 - Strings: `CAR(string)` points to STRING atom; substrings: `CAR(substr)` = SUBSTR, `CDR(substr)` = `(sourcestring start . length)`
+- Arrays: `CAR(array)` = the ARRAY atom, and the print-name area holds a three-part header
+  (pointers, integers, reals) which `arrutl_` decodes
+
+The last two lines make an atom's CAR both its value cell **and** its type tag, so
+`RPLACA` -- which `SETQ`, `SET`, `SETTOPVAL` and `RPAQ` all reach -- refuses to store
+`ARRAY`, `STRING` or `SUBSTR` into a literal atom. Without that, `(SETQ ZQ 'LISPF4-ARRAY)`
+made `ZQ` *be* an array whose header was the letters of its own print name, and the
+collector wrote through it (I1). A cons cell's CAR is not a type tag, so `(RPLACA (LIST 1 2)
+'LISPF4-ARRAY)` is still allowed. `arrutl_` validates the decoded header independently,
+which is what also makes a corrupt image survivable.
 
 ### Character Handling
 
@@ -514,6 +716,21 @@ The interpreter uses a stack-based evaluation loop with computed GOTOs (translat
 
 Return point codes (stored on stack, used for dispatch after evaluation):
 - Small integers encoding which point in the eval/apply loop to return to
+
+**L1** is the reset label, and what it clears is load-bearing. It re-initialises `IP`/`JP`,
+`HILLW`, `MIDDL`, `ENV`/`TOPS` and the flag registers, and it must also clear the whole
+register file -- `ARG`, `ARG2`, `ARG3`, `ALIST`, `FORM`, `TEMP1`, `TEMP2`, `TEMP3`,
+`I1CONS`, `I2CONS`. Those live in `ARGS(1..NARGS)` and are GC roots (`garb_` STEP 1), so
+anything left set after a reset keeps its structure alive. `REVERSE` accumulates into
+`TEMP1`, and before I3 that turned a single list-space exhaustion on a circular list into
+an unbreakable collect / "List space empty" / reset loop: every reset arrived back at the
+same rooted heap.
+
+**L2400** is `SYSERROR`: it conses `(ERRTYP L ARG FORM)` and applies the Lisp-level
+`SYSERROR` to it, so any C-level detour to it has to have `L` (the failing function) and
+`ARG` (the offending value) set, and has to have given back whatever stack it consumed --
+`EVAL` re-checks its `MIDDL` margin on the way in and will bounce straight to `L25090` if
+the A-stack is still full (I5).
 
 ### SYSATOMS File Format
 
@@ -591,6 +808,25 @@ as cons cells. Nothing crashed; the data was just wrong.
 A small integer that no longer fits the smaller `ISMALL` of a larger system saturates.
 That value genuinely has no encoding in the new configuration; saturating is the honest
 answer and it is what `tests/cases/e3-negimg.sh` expects.
+
+**Validation.** `ROLLIN` rejects an image in two places, and the difference matters:
+
+- **Before anything is written**, it compares the first eight header words against the
+  running configuration, checks the three size comparisons (atom space, print names,
+  free storage), and checks that the seven header *pointers* are positive, ordered and
+  inside their areas. All of these take `L90`, which returns `NIL` with nothing touched,
+  so a Lisp-level `(ROLLIN n)` can carry on and `main()` turns it into "not a valid Lisp
+  F4 image" and a clean exit 1.
+- **After the tables are read**, it checks `PNP` (non-decreasing, `>= 1`, no entry past
+  `JBP`) and `CAR`/`CDR` (never zero or negative outside a collection). By then the
+  atoms, cells and print names have been partly overwritten, so there is no consistent
+  state to return to: this path prints a diagnostic and stops the interpreter, the same
+  way a short read does. The header pointers are checked in the first group precisely
+  because they are used as subscripts *while* the tables are being read.
+
+Before I6 the tables were trusted entirely, and `REHASH` took `JB` and `L` straight out
+of `PNP` -- so one flipped byte was enough for a SIGSEGV. `tests/cases/i6-corruptimg.sh`
+sweeps the whole image and asserts that no single-byte corruption produces a signal.
 
 ### Garbage Collection (`garb_()`)
 
@@ -750,30 +986,32 @@ fail. `tests/cases/prolog2-gc.sh` runs one query 301 times under collection pres
 
 | Function | File:Line | Description |
 |----------|-----------|-------------|
-| `main()` | lispf42.c:188 | Entry point, command-line parsing, memory allocation, startup. Rejects a degenerate configuration -- note the `-s` floor of 500 (G4) |
-| `init1_()` | lispf42.c:1269 | Machine-dependent initialization (JBYTES, MAXBIG, NUMADD, FUZZ, etc.) |
-| `init2_()` | lispf42.c:1362 | Reads SYSATOMS, initializes atoms/hash table/free lists |
+| `main()` | lispf42.c:208 | Entry point, command-line parsing, memory allocation, startup. Rejects a degenerate configuration -- note the `-s` floor of 500 (G4) |
+| `init1_()` | lispf42.c:1397 | Machine-dependent initialization (JBYTES, MAXBIG, NUMADD, FUZZ, etc.) |
+| `init2_()` | lispf42.c:1490 | Reads SYSATOMS, initializes atoms/hash table/free lists |
 | `lispf4_()` | lispf41.c | Main eval/apply loop |
-| `rollin_()` | lispf42.c:1606 | Load binary image file |
-| `rollou_()` | lispf42.c:1803 | Save binary image file. Ignores write errors, so its callers must check the unit is open first |
-| `move_()` | lispf42.c:1910 | Relocate stored values on ROLLIN: CAR/CDR, the ARGS block, **and the pointer part of every array** (mirrors `garb_` STEP 6). One pass; `reloc_` (lispf42.c:1880) classifies each value into cells / floats / small integers first, so nothing is relocated twice |
-| `equal_()` | lispf42.c:715 | Structural equality. No cycle detection: it tests `apush2_`'s overflow marker and polls the break flag, so a circular comparison is bounded or killable rather than an unrecoverable hang. A float and an integer of the same value are **not** equal -- except at zero, where `gtreal_` answers 0.0 for both |
-| `get_()` | lispf42.c:808 | Property lookup. Answers NIL for a malformed property list -- `RPLACD` on an atom can produce one, and EAPPLY's two hand-inlined copies fall back here |
-| `getpn_()` | lispf42.c:852 | **The single decoder for every string operation**: returns the byte offset and length of a litatom/string/substring. A substring's descriptor is three ordinary cons cells that `(CDR s)` hands to Lisp, so this is where the offset and length are validated -- genuine small integers, and inside the string they are a window onto (F1). Answers -1 for anything else |
-| `arrutl_()` | lispf42.c:1010 | Array bookkeeping. Actions 1 and 2 (get/set an element) refuse to act while `IBREAK` is set; actions 3 and 4 (bounds, make) must not, because `garb_` and `move_` call them and a refusal leaves their indices stale (G2) |
-| `prinat_()` | lispf42.c:2509 | Print one atom, plus the leading `'` for each nested `(QUOTE x)`. Every write into `PRBUFF` here is bounded by `MARG` |
-| `priflo_()` | lispf42.c:2725 | Print a float. Normalises and extracts digits in `doublereal`; `FUZZ` turns the truncating digit loop into round-to-nearest and must stay half a unit in the last *printed* place, which is `NDIG` significant digits in E format but fewer in F format when leading zeros eat the budget. L51 assumes a finite value; `mkreal_` guarantees one |
-| `ratom_()` | lispf42.c:3233 | Token reader. A literal worth zero is an integer only when it held no `.` and no `E` (F3) |
-| `garb_()` | lispf42.c:3724 | Garbage collector (mark-and-sweep with compaction) |
-| `markl_()` | lispf42.c:4487 | Non-recursive (Schorr-Waite) marker, used when STEP 1 exhausts the A-stack. Needs the same `s <= T` leaf test the inline marker has, on both CAR and CDR (G1) |
-| `shift_()` | lispf42.c:3588 | Character input reader / tokenizer (contains EOF handling at L1300) |
-| `lspex_()` | lispf42.c:5094 | Clean exit routine (prints GC stats, calls `exit(0)`) |
-| `mess_()` | lispf42.c:5140 | Print system message by number (messages defined in SYSATOMS). Clamps the number, so a Lisp-supplied one cannot index outside `IMESS` |
-| `rda1_()` | lispf42.c:5453 | Low-level line reader; sets `ieof=2` on end-of-file |
-| `matom_()` | lispf42.c:4695 | Atom creation. `k > 0` interns a literal atom from the `k` bytes in `ABUFF`; `k <= 0` makes an unhashed string of length `-k`. **`ABUFF` is 160 bytes, so that is the hard ceiling on a literal atom.** |
-| `openf_()` | lispf42.c:5684 | `OPEN0`: open a file on the first free logical unit >= 10, skipping the reserved 4/5/6 |
-| `getcht_()` | lispf42.c:5001 | Query character type table |
-| `setcht_()` | lispf42.c:5022 | Set character type table entry |
+| `rollin_()` | lispf42.c:1734 | Load binary image file. Validates the header pointers before writing anything (`L90`, recoverable) and the `PNP`/`CAR`/`CDR` tables after reading them (`L95`, stops the interpreter) -- see *Validation* under Image Files (I6) |
+| `rollou_()` | lispf42.c:1987 | Save binary image file. Ignores write errors, so its callers must check the unit is open first |
+| `move_()` | lispf42.c:2094 | Relocate stored values on ROLLIN: CAR/CDR, the ARGS block, **and the pointer part of every array** (mirrors `garb_` STEP 6). One pass; `reloc_` (lispf42.c:2064) classifies each value into cells / floats / small integers first, so nothing is relocated twice |
+| `equal_()` | lispf42.c:778 | Structural equality. No cycle detection, but bounded: it tests `apush2_`'s overflow marker (which stops a CAR-circular walk), polls the break flag, and carries a per-call node budget of `max(EQNODES, 100 * NFREET)` (which stops a CDR-circular one). Running out of either plants marker 16 and answers NIL, so both report `--- Stack overflow`. A float and an integer of the same value are **not** equal -- except at zero, where `gtreal_` answers 0.0 for both |
+| `subpr_()` | lispf42.c:645 | `SUBPAIR`, and therefore `COPY`. Saves `IP`/`JP` at entry and restores both at `L90`, so the A-stack it consumed is available again for `SYSERROR` to report the overflow (I5); polls the break flag in its MEMB walk (I4) |
+| `nchars_()` | lispf42.c:5306 | Renders a form into `PRBUFF`/`PNAME` and counts the characters; the shared exit for `NCHARS`, `PACK`, `UNPACK` and `CONCAT` is `12440` in lispf41.c, which restores `PRBUFF`/`PRTPOS` and only then acts on an interrupt |
+| `get_()` | lispf42.c:904 | Property lookup. Answers NIL for a malformed property list -- `RPLACD` on an atom can produce one, and EAPPLY's two hand-inlined copies fall back here |
+| `getpn_()` | lispf42.c:948 | **The single decoder for every string operation**: returns the byte offset and length of a litatom/string/substring. A substring's descriptor is three ordinary cons cells that `(CDR s)` hands to Lisp, so this is where the offset and length are validated -- genuine small integers, and inside the string they are a window onto (F1). Answers -1 for anything else |
+| `arrutl_()` | lispf42.c:1106 | **The single decoder for an array header**, the way `getpn_` is for a print name: it validates the two header words and the three part bounds before anything subscripts with them, which is what stops a forged type tag (I1) and a corrupt image (I6) from reaching `PNAME`. Actions 1 and 2 (get/set an element) refuse to act while `IBREAK` is set; actions 3 and 4 (bounds, make) must not, because `garb_` and `move_` call them and a refusal leaves their indices stale (G2). Action 4 is exempt from the bounds test -- it *builds* the header as it goes |
+| `prinat_()` | lispf42.c:2714 | Print one atom, plus the leading `'` for each nested `(QUOTE x)`. Every write into `PRBUFF` is bounded, but by `IOBUFF-4` rather than by `MARG`: a name too wide for a line overruns the right margin instead of being split, so what `MAKEFILE` writes is what `LOAD` reads back (I2) |
+| `priflo_()` | lispf42.c:2921 | Print a float. Asks `signbit`, not `dr < 0.`, so a negative zero keeps its sign and every float bit pattern round-trips through `PRINT`/`READ`. Normalises and extracts digits in `doublereal`; `FUZZ` turns the truncating digit loop into round-to-nearest and must stay half a unit in the last *printed* place, which is `NDIG` significant digits in E format but fewer in F format when leading zeros eat the budget. L51 assumes a finite value; `mkreal_` guarantees one |
+| `ratom_()` | lispf42.c:3461 | Token reader. A literal worth zero is an integer only when it held no `.` and no `E` (F3) |
+| `garb_()` | lispf42.c:3968 | Garbage collector (mark-and-sweep with compaction) |
+| `markl_()` | lispf42.c:4731 | Non-recursive (Schorr-Waite) marker, used when STEP 1 exhausts the A-stack. Needs the same `s <= T` leaf test the inline marker has, on both CAR and CDR (G1) |
+| `shift_()` | lispf42.c:3816 | Character input reader / tokenizer (EOF handling at L1300). Classifies with `getcht_` at L1150, folding a lowercase letter to its uppercase type when the upshift option is on -- which is what makes `1.5e3` a number (I7) |
+| `lspex_()` | lispf42.c:5365 | Clean exit routine (prints GC stats, calls `exit(0)`) |
+| `mess_()` | lispf42.c:5411 | Print system message by number (messages defined in SYSATOMS). Clamps the number, so a Lisp-supplied one cannot index outside `IMESS` |
+| `rda1_()` | lispf42.c:5724 | Low-level line reader; sets `ieof=2` on end-of-file |
+| `matom_()` | lispf42.c:4939 | Atom creation. `k > 0` interns a literal atom from the `k` bytes in `ABUFF`; `k <= 0` makes an unhashed string of length `-k`. **`ABUFF` is 160 bytes, so that is the hard ceiling on a literal atom.** |
+| `openf_()` | lispf42.c:5955 | `OPEN0`: open a file on the first free logical unit >= 10, skipping the reserved 4/5/6 |
+| `getcht_()` | lispf42.c:5262 | Query character type table |
+| `setcht_()` | lispf42.c:5283 | Set character type table entry |
 | `getch_()` | auxillary.c | Read byte -> blank-padded character in an integer |
 | `putch_()` | auxillary.c | Store a character's low byte into a byte array |
 | `f4_fp()` | auxillary.c | Validated lookup of a logical unit's `FILE*` (NULL if bad/closed) |
@@ -838,6 +1076,19 @@ returns NULL for a closed unit, so every `f4_*` entry point reports failure inst
 5. `read1()` tracks `read_status[lun]` (per unit): 1=reading, 2=at EOL, 3=at EOF
 6. On EOF, `rda1_()` sets `ieof=2`, which `shift_()` detects at L1300
 
+`rda1_()` blank-**pads** every line out to `MARGR`, so nothing downstream can tell a real
+trailing blank from padding. Two consequences worth knowing: a printed form wider than a
+line, split across two lines, comes back with `150 - 78 = 72` blanks embedded in it (which
+is why the printer no longer splits -- I2), and a `%` at the physical end of a line escapes
+a *blank* rather than acting as a delimiter.
+
+`shift_()` classifies each character with `getcht_()` at L1150. `CHTAB` holds one character
+per type, so when the upshift option is on (`DREG(4) = T`) a lowercase letter is re-looked-up
+under its uppercase form -- but only if it came back as the default type 10, so a `CHTAB`
+entry deliberately set to a lowercase character still means what it says. As shipped this
+reaches exactly one entry, `E` (type 25, the float exponent marker); before I7, `1.5e3` read
+as a literal atom while `1.5E3` read as a number.
+
 ### IOTAB
 
 `(IOTAB entry value)` reads and sets the I/O table, which is the `/B/` block from `LUNIN`
@@ -864,6 +1115,12 @@ Each entry is clamped: the read margins against `IOBUFF`, the print margins agai
 against `MAXLUN` -- and a unit that is not open is refused. A left margin may not pass its
 right margin: `LMARGR > MARGR` made `shift_` read and discard a whole input line per call
 and never yield a character, which swallowed the rest of the session.
+
+`basic.img` sets `MARGR` to 150 and `MARG` to 78. `MARG` is a *layout* limit, not a hard
+one: a single atom or string whose printed form is wider than a line overruns it rather
+than being split, because splitting it would make the output unreadable (I2). The real
+ceiling is `IOBUFF-4` = 156 columns, which is above the read margin, so anything the reader
+can take in one line round-trips through `MAKEFILE`/`LOAD`.
 
 ---
 

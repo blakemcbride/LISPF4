@@ -112,11 +112,13 @@ prerequisite's name:
 dependency — put it back by hand. `prolog2.lisp`, `match.lisp`, `quote.lisp`,
 `static.lisp` and `schum.lisp` are self-contained.
 
-`READFILE` (defined in `basic1.lisp`) asks `OPEN0` for a free unit rather than always
-taking 15, which is what makes a `READFILE` inside a `READFILE` work. It had to: `f4_open`
-silently closes and reuses a unit that is already open, so the fixed unit did not merely
-fail, it pulled the outer file out from under the reader. `LOAD` (`makef.lisp`) still
-takes unit 20 and is still not re-entrant, so nest through `READFILE`.
+`READFILE` (`basic1.lisp`), `LOAD` and `MAKEFILE` (`makef.lisp`) all ask `OPEN0` for a
+free unit rather than taking a fixed one. They have to: `f4_open` silently closes and
+reuses a unit that is already open, so a fixed unit does not merely fail, it pulls the
+outer file out from under the reader. `READFILE` used to take 15 and `LOAD`/`MAKEFILE`
+both took 20, so a `LOAD` inside a `LOAD` — or a `MAKEFILE` inside a `LOAD` — loaded the
+inner file and then silently dropped everything after that line in the outer one. All
+three now nest. `SYSIN`/`SYSOUT` still take unit 30; nothing nests them.
 
 `SYSATOMS` defines the builtin function tables read by `init2_()` during bare startup: seven SUBR groups (SUBR0, SUBR1, SUBR11, SUBR2, SUBR3, SUBRN, FSUBR), then individual atoms, then the numbered system messages. Atoms are created in file order, and the eval loop dispatches builtins by comparing an atom's index against the group boundary registers — so **adding or reordering entries shifts every subsequent builtin's dispatch group**. `SYSATOMS` is read only during `-x` startup; existing images carry their own atom table and will not pick up the change. Regenerate from the bottom: `make realclean && make`. `init2_()` now checks every read: a
 `SYSATOMS` that runs out mid-table, or whose message section is short of `MAXMES` lines,

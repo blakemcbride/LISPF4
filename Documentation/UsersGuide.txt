@@ -811,7 +811,7 @@ Other functions not reported in Ha 75 are:
  
              (ABS n)
              (ADDLIST a l)    if memb(a,l) then l else cons(a,l)
-             (SORT l)         Destructive sorting function
+             (DSORT l)        Destructive sorting function
              (EVLIS l)        mapcar(l,'EVAL)
              (GCGAG flg)      Print message when GBC (if flg = T)
              (NTH l n)        Performs CDR n-1 times on l
@@ -855,7 +855,7 @@ as above.
 picks the element j of the pointer, integer or floating part of a.
 Within each part, the elements are indexed from 1 and upwards.
  
-             (SET a j x) = x
+             (SETA a j x) = x
              (SETI a j i) = i
              (SETR a j f) = f
  

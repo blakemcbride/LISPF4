@@ -272,6 +272,22 @@ L1:
     b_1.ibreak = FALSE_;
     b_1.arg = b_1.lispx;
     b_1.arg2 = b_1.nil;
+/*   I3: THE REST OF THE REGISTER FILE IS IN ARGS(1..NARGS) AND SO IS SCANNED */
+/*   BY GARB'S STEP 1 AS A ROOT.  LEAVING IT SET AFTER A RESET KEEPS ALIVE    */
+/*   EXACTLY THE STRUCTURE THAT CAUSED THE RESET: REVERSE ACCUMULATES INTO    */
+/*   TEMP1, SO AN EXHAUSTION ON A CIRCULAR LIST LEFT TEMP1 HEADING A CHAIN OF */
+/*   EVERY CELL IN THE SYSTEM.  THE TOP LOOP'S FIRST CONS THEN COLLECTED,     */
+/*   GOT NOTHING BACK, REPORTED "LIST SPACE EMPTY" AND RESET INTO THE SAME    */
+/*   STATE -- AN UNKILLABLE LOOP AT A MEGABYTE OF OUTPUT A SECOND.  TEMP3 IS  */
+/*   ALIASED AS BRSTK BY RATOM/IREAD, WHICH RE-INITIALISE IT AT ENTRY, SO     */
+/*   CLEARING IT HERE IS SAFE.                                               */
+    b_1.arg3 = b_1.nil;
+    b_1.alist__ = b_1.nil;
+    b_1.temp1 = b_1.nil;
+    b_1.temp2 = b_1.nil;
+    b_1.temp3 = b_1.nil;
+    b_1.i1cons = b_1.nil;
+    b_1.i2cons = b_1.nil;
     jaan_1.env = 0;
     jaan_1.tops = 0;
     getch_(c_b8, prompt_1.protxt, &c__1);
@@ -1969,6 +1985,18 @@ L11255:
 	goto L3090;
     }
 L11256:
+/*   I4: EVERY LIST-WALKING BUILTIN BELOW USES THIS POLL.  E12 GAVE EQUAL A   */
+/*   CYCLE ESCAPE, BUT THE TWELVE LOOPS THAT WALK A SPINE WITH A BARE GOTO    */
+/*   NEVER LOOKED AT THE BREAK FLAG AT ALL, SO A CIRCULAR ARGUMENT MEANT      */
+/*   KILL -9.  CIRCULAR STRUCTURE IS NOT EXOTIC HERE: DOCOLLECT BUILDS ONE ON */
+/*   PURPOSE AS ITS ACCUMULATOR, SO (LENGTH Q) ON A HALF-BUILT COLLECTOR USED */
+/*   TO HANG THE SYSTEM.  L2400 IS SYSERROR, WHICH CLEARS IBREAK ITSELF.      */
+    if (f4_break_pending) {
+	f4_break_pending = 0;
+	b_1.errtyp = 26;
+	b_1.ibreak = TRUE_;
+	goto L2400;
+    }
     b_1.temp1 = carcdr_1.cdr[b_1.arg - 1];
     if (b_1.temp1 <= a_1.natom || b_1.temp1 > a_1.nfreet) {
 	goto L998;
@@ -1981,6 +2009,13 @@ L11256:
 L11260:
     k = 0;
 L11270:
+/*                                      ! I4: SEE THE NOTE AT 11256 */
+    if (f4_break_pending) {
+	f4_break_pending = 0;
+	b_1.errtyp = 26;
+	b_1.ibreak = TRUE_;
+	goto L2400;
+    }
     if (b_1.arg <= a_1.natom || b_1.arg > a_1.nfreet) {
 	goto L11280;
     }
@@ -2095,6 +2130,13 @@ L11370:
     }
     b_1.temp1 = b_1.nil;
 L11390:
+/*                                      ! I4: SEE THE NOTE AT 11256 */
+    if (f4_break_pending) {
+	f4_break_pending = 0;
+	b_1.errtyp = 26;
+	b_1.ibreak = TRUE_;
+	goto L2400;
+    }
     icar = carcdr_1.car[b_1.arg - 1];
     b_1.temp1 = cons_(&icar, &b_1.temp1);
     b_1.arg = carcdr_1.cdr[b_1.arg - 1];
@@ -2149,6 +2191,13 @@ L11420:
 L12000:
     i__ = b_1.arg2;
 L12010:
+/*                                      ! I4: SEE THE NOTE AT 11256 */
+    if (f4_break_pending) {
+	f4_break_pending = 0;
+	b_1.errtyp = 26;
+	b_1.ibreak = TRUE_;
+	goto L2400;
+    }
     if (i__ <= a_1.natom || i__ > a_1.nfreet) {
 	goto L12020;
     }
@@ -2603,6 +2652,13 @@ L12350:
     i__ = b_1.arg;
     *ires = b_1.arg2;
 L12360:
+/*                                      ! I4: SEE THE NOTE AT 11256 */
+    if (f4_break_pending) {
+	f4_break_pending = 0;
+	b_1.errtyp = 26;
+	b_1.ibreak = TRUE_;
+	goto L2400;
+    }
     if (*ires <= a_1.natom || *ires > a_1.nfreet) {
 	goto L3090;
     }
@@ -2618,11 +2674,33 @@ L12390:
     i__ = b_1.arg;
     *ires = b_1.arg2;
 L12400:
+/*                                      ! I4: SEE THE NOTE AT 11256 */
+    if (f4_break_pending) {
+	f4_break_pending = 0;
+	b_1.errtyp = 26;
+	b_1.ibreak = TRUE_;
+	goto L2400;
+    }
     if (*ires <= a_1.natom || *ires > a_1.nfreet) {
 	goto L3090;
     }
     icar = carcdr_1.car[*ires - 1];
     if (equal_(&i__, &icar) != b_1.nil) {
+	goto L998;
+    }
+/*   I4: EQUAL HAS A POLL OF ITS OWN, AND IT CLEARS F4_BREAK_PENDING AND THEN */
+/*   RETURNS NIL -- WHICH THIS LOOP READ AS "NOT THIS ELEMENT" AND CARRIED ON.*/
+/*   THAT MADE MEMBER *WORSE* THAN A LOOP WITH NO POLL AT ALL: THE FIRST      */
+/*   CTRL-C WAS SWALLOWED AND EVERY LATER ONE MET A FLAG THE PREVIOUS         */
+/*   ITERATION HAD ALREADY CLEARED.  IBREAK IS EQUAL'S WAY OF SAYING WHICH    */
+/*   OF THE TWO NILS IT MEANT.                                               */
+    if (b_1.ibreak) {
+	goto L2400;
+    }
+/*   AND EQUAL ANSWERS NIL WITH THE MARKER 16 IN THE F-STACK WHEN IT RUNS OUT */
+/*   OF A-STACK OR OF ITS NODE BUDGET.  WITHOUT THIS TEST THE WALK CARRIED ON */
+/*   AND PAID THAT COST ONCE PER ELEMENT BEFORE 999 GOT TO REPORT IT.         */
+    if (b_1.stack[b_1.ip - 1] == 16) {
 	goto L998;
     }
     *ires = carcdr_1.cdr[*ires - 1];
@@ -2647,6 +2725,16 @@ L12440:
     for (i__ = 1; i__ <= i__1 || i__ == 1; ++i__) {
 /* L12450: */
 	b_1.prbuff[i__ - 1] = b_1.buff[i__ - 1];
+    }
+/*   I4: NCHARS WALKS ITS ARGUMENT'S SPINE WITH A BARE GOTO AND SO USED TO   */
+/*   HANG ON A CIRCULAR LIST.  ITS POLL ONLY RAISES IBREAK AND LETS NCHARS   */
+/*   RETURN THE NORMAL WAY, BECAUSE PRBUFF AND PRTPOS MUST BE PUT BACK FIRST */
+/*   -- WHICH IS WHAT THE LOOP ABOVE DOES.  PACK, UNPACK, CONCAT AND NCHARS  */
+/*   ALL RETURN THROUGH HERE.  ONLY ERRTYP 26 (KEYBOARD INTERRUPT) IS TAKEN: */
+/*   PRIN1 ALSO RAISES IBREAK FROM IN HERE, FOR A BAD SUBSTRING, AND THAT ONE*/
+/*   HAS ALWAYS BEEN LEFT TO SURFACE AT THE CALLING LISP FUNCTION.           */
+    if (b_1.ibreak && b_1.errtyp == 26) {
+	goto L2400;
     }
     goto L998;
 L12460:
@@ -2835,6 +2923,20 @@ L12580:
     if (s__1 <= b_1.substr && s__1 >= b_1.array) {
 	goto L25020;
     }
+/*   I1: A LITERAL ATOM'S CAR IS BOTH ITS VALUE CELL AND ITS TYPE TAG -- */
+/*   CAR(X) == ARRAY *IS* THE DEFINITION OF "X IS AN ARRAY", SO STORING THE */
+/*   MARKER ATOM AS A VALUE MAKES AN ORDINARY ATOM ANSWER THAT TEST AND ITS */
+/*   PRINT NAME IS THEN DECODED AS AN ARRAY HEADER.  SETQ, SET, SETTOPVAL AND */
+/*   RPAQ ALL ARRIVE HERE, WHICH IS WHY THE TEST IS HERE RATHER THAN IN EACH */
+/*   OF THEM.  A CONS CELL'S CAR IS NOT A TYPE TAG, SO THE 12590 ENTRY -- THE */
+/*   ONE TAKEN WHEN ARG IS A LIST -- IS DELIBERATELY LEFT ALONE.  ARRUTL      */
+/*   VALIDATES THE HEADER IT DECODES AS WELL; EITHER TEST CLOSES THIS ALONE.  */
+/*   NOBIND IS NOT INCLUDED: IT IS A VALUE-CELL SENTINEL RATHER THAN A TYPE   */
+/*   TAG, FORGING IT ONLY MAKES A VARIABLE READ AS UNBOUND, AND REFUSING IT   */
+/*   WOULD REMOVE THE ONLY WAY TO UNBIND ONE.                                */
+    if (b_1.arg2 <= b_1.substr && b_1.arg2 >= b_1.array) {
+	goto L25010;
+    }
 /* *SETC*12590 CALL SETCAR(ARG, ARG2) */
 L12590:
     carcdr_1.car[b_1.arg - 1] = b_1.arg2;
@@ -2903,6 +3005,13 @@ L12650:
 
 /* SASSOC */
 L12655:
+/*                                      ! I4: SEE THE NOTE AT 11256 */
+    if (f4_break_pending) {
+	f4_break_pending = 0;
+	b_1.errtyp = 26;
+	b_1.ibreak = TRUE_;
+	goto L2400;
+    }
     if (b_1.arg2 <= a_1.natom || b_1.arg2 > a_1.nfreet) {
 	goto L12659;
     }
@@ -2917,6 +3026,16 @@ L12655:
     if41 = carcdr_1.car[b_1.temp1 - 1];
     if (equal_(&b_1.arg, &if41) != b_1.nil) {
 	goto L12658;
+    }
+/*                                      ! I4: SEE THE NOTE AT 12400 -- EQUAL */
+/*                                      ! SWALLOWS THE INTERRUPT OTHERWISE, */
+/*                                      ! AND ITS OVERFLOW/BUDGET MARKER IS  */
+/*                                      ! PAID FOR ONCE PER ELEMENT OTHERWISE */
+    if (b_1.ibreak) {
+	goto L2400;
+    }
+    if (b_1.stack[b_1.ip - 1] == 16) {
+	goto L998;
     }
     b_1.arg2 = carcdr_1.cdr[b_1.arg2 - 1];
     goto L12655;
@@ -3000,6 +3119,13 @@ L12690:
 /* ASSOC */
 
 L12715:
+/*                                      ! I4: SEE THE NOTE AT 11256 */
+    if (f4_break_pending) {
+	f4_break_pending = 0;
+	b_1.errtyp = 26;
+	b_1.ibreak = TRUE_;
+	goto L2400;
+    }
     if (b_1.arg2 <= a_1.natom || b_1.arg2 > a_1.nfreet) {
 	goto L12719;
     }
@@ -3118,6 +3244,13 @@ L12745:
     goto L998;
 /* TAILP */
 L12746:
+/*                                      ! I4: SEE THE NOTE AT 11256 */
+    if (f4_break_pending) {
+	f4_break_pending = 0;
+	b_1.errtyp = 26;
+	b_1.ibreak = TRUE_;
+	goto L2400;
+    }
     if (b_1.arg2 <= a_1.natom || b_1.arg2 > a_1.nfreet) {
 	goto L3090;
     }
@@ -3468,6 +3601,16 @@ L15148:
 
 L15150:
     *ires = subpr_(&b_1.arg, &b_1.arg2, &b_1.arg3);
+/*                                      ! I4: SUBPR RESTORES BOTH STACKS AND */
+/*                                      ! RAISES ERRTYP 26 WHEN ITS MEMB WALK */
+/*                                      ! IS INTERRUPTED.  THE A-STACK        */
+/*                                      ! OVERFLOW EXIT USES THE F-STACK       */
+/*                                      ! MARKER AND STILL GOES THROUGH        */
+/*                                      ! 998/999; SO DOES CONS'S "SPACE       */
+/*                                      ! ALMOST EXHAUSTED" WARNING.           */
+    if (b_1.ibreak && b_1.errtyp == 26) {
+	goto L2400;
+    }
     goto L998;
 
 /* SUBSTRING */

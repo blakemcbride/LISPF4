@@ -44,6 +44,18 @@ int     f4_reset_ready = 0;
 
 #define PRNODES		((integer) 100000)
 
+/*  EQUAL's per-call node budget -- see the note in EQUAL.  E12 gave EQUAL a
+    break poll and made it notice APUSH2's overflow marker, which bounded the
+    CAR-circular case; a CDR-circular pair never grows the A-stack at all and
+    so still ran forever, killable only with Ctrl-C.  This is PRIN1's H1 answer
+    applied to the comparison: bound the work, and report running out the same
+    way an A-stack overflow is reported.  100 times the default cons-cell count
+    -- a comparison of *unshared* structure can visit no more nodes than there
+    are cells in the system, so only a cycle, or sharing with a hundredfold
+    blow-up, can reach it.  It costs about a twentieth of a second to spend.  */
+
+#define EQNODES		((integer) 10000000)
+
 /*  Non-zero while INIT2 is reading SYSATOMS.  End-of-file there always means
     a truncated or corrupt SYSATOMS, but SHIFT's normal reaction to EOF on a
     non-terminal unit is to switch the reader back to LUNINS and carry on --
@@ -644,9 +656,20 @@ integer subpr_(integer *ix, integer *iy, integer *is)
     extern integer equal_(integer *, integer *);
     extern /* Subroutine */ int fpush_(integer *), apush_(integer *);
 #define res ((integer *)&b_1.temp1)  /*  ((integer *)&b_1 + 5)  */
+    static integer ipe, jpe;
 
 /* OMMON AND INTEGER DECLARATIONS */
 /* OMMON AND INTEGER DECLARATIONS END */
+/*   I5: EVAL REFUSES TO DESCEND ONCE THE A-STACK IS WITHIN MIDDL SLOTS OF */
+/*   FULL, AND THAT MARGIN IS WHAT LEAVES ROOM FOR SYSERROR TO RUN.  APUSH */
+/*   AND FPUSH STOP ONLY AT 100% FULL, SO A C ROUTINE THAT OVERFLOWS MUST   */
+/*   GIVE THE SPACE BACK ITSELF -- PRIN1 BOUNDS ITS OWN DEPTH AND EQUAL     */
+/*   RESTORES JP AT L60.  SUBPR DID NEITHER, SO L25090 COULD NEVER REPORT   */
+/*   THE OVERFLOW: EVAL FAILED THE MARGIN TEST AGAIN, MIDDL HALVED FIVE     */
+/*   TIMES AND THE SESSION RESET WITH NO MESSAGE AND NOTHING FOR ERRORSET   */
+/*   TO CATCH.  (COPY IS (SUBPAIR NIL NIL X), SO IT SHOWED THERE TOO.)      */
+    ipe = b_1.ip;
+    jpe = b_1.jp;
     *s = *is;
     fpush_(&c__1);
 /* -- MEMB TEST OF S IN IX */
@@ -654,6 +677,19 @@ L5:
     j = *ix;
     k = *iy;
 L6:
+/*   I4: A CIRCULAR OLD-LIST SENDS THIS ROUND FOREVER.  EQUAL'S OWN POLL     */
+/*   ONLY ANSWERS "NOT EQUAL", WHICH THIS LOOP READS AS "KEEP LOOKING", SO   */
+/*   THE POLL HAS TO BE HERE TOO.  L90 IS THE OVERFLOW EXIT, WHICH RESTORES  */
+/*   BOTH STACKS AND LEAVES A MARKER FOR LISPF4 -- EXACTLY WHAT IS WANTED    */
+/*   HERE AS WELL, EXCEPT THAT THE MARKER MUST SAY "INTERRUPT" INSTEAD.      */
+    if (f4_break_pending) {
+	f4_break_pending = 0;
+	b_1.errtyp = 26;
+	b_1.ibreak = TRUE_;
+	b_1.ip = ipe;
+	b_1.jp = jpe;
+	return ret_val;
+    }
     if (j <= a_1.natom || j > a_1.nfreet) {
 	goto L7;
     }
@@ -662,6 +698,18 @@ L6:
     }
     if (equal_(&carcdr_1.car[j - 1], s) == b_1.t) {
 	goto L8;
+    }
+    if (b_1.ibreak && b_1.errtyp == 26) {
+	b_1.ip = ipe;
+	b_1.jp = jpe;
+	return ret_val;
+    }
+/*   INSIDE SUBPR THE F-STACK TOP IS ALWAYS ONE OF ITS OWN MARKERS 1, 2 OR 3, */
+/*   SO ANYTHING LARGER IS AN ERROR MARKER EQUAL PLANTED WHEN IT RAN OUT OF   */
+/*   A-STACK OR OF ITS NODE BUDGET.  SAME TEST L20 MAKES; TAKE THE SAME EXIT. */
+    i__ = b_1.stack[b_1.ip - 1];
+    if (i__ > 3) {
+	goto L90;
     }
     j = carcdr_1.cdr[j - 1];
     k = carcdr_1.cdr[k - 1];
@@ -715,6 +763,16 @@ L50:
     return ret_val;
 /*             PDL OVERFLOW. LEAVE OFLO ADDRESS (16) IN F-STACK */
 L90:
+/*   I5: HAND BACK BOTH STACKS AND RE-PLANT THE MARKER WHERE LISPF4'S RETURN */
+/*   DISPATCHER WILL READ IT.  I IS 16 (OVERFLOW) OR 17 (UNDERFLOW); WRITING */
+/*   IT AT THE ENTRY F-STACK TOP IS EXACTLY WHAT FPUSH ALREADY DOES WHEN THE */
+/*   VERY FIRST PUSH FAILS, SO THE HANDLER SEES THE SAME SHAPE EITHER WAY.   */
+    b_1.ip = ipe;
+    b_1.jp = jpe;
+    if (b_1.ip < 1) {
+	b_1.ip = 1;
+    }
+    b_1.stack[b_1.ip - 1] = i__;
     return ret_val;
 } /* subpr_ */
 
@@ -734,11 +792,25 @@ integer equal_(integer *ii, integer *jj)
     static integer in, jn;
     extern integer comppn_(integer *, integer *);
     extern doublereal gtreal_(integer *, integer *);
-    static integer jpe;
+    static integer jpe, nodes, budget;
+    static doublereal d__1;
 
 /* OMMON AND INTEGER DECLARATIONS */
 /* OMMON AND INTEGER DECLARATIONS END */
     jpe = b_1.jp;
+    nodes = 0;
+/*   THE BUDGET IS A HUNDRED TIMES THE CELL COUNT, NEVER LESS THAN EQNODES.  */
+/*   COMPUTED IN DOUBLEREAL AND CLAMPED, BECAUSE -C ACCEPTS UP TO 200 000 000 */
+/*   AND 100 * THAT DOES NOT FIT AN INTEGER.  AT THE DEFAULT -C THAT IS TEN   */
+/*   MILLION NODES, WHICH THIS LOOP SPENDS IN ABOUT A FIFTIETH OF A SECOND.   */
+    d__1 = (doublereal) a_1.nfreet * 100.;
+    if (d__1 > (doublereal) a_1.maxint) {
+	d__1 = (doublereal) a_1.maxint;
+    }
+    budget = (integer) d__1;
+    if (budget < EQNODES) {
+	budget = EQNODES;
+    }
     i__ = *ii;
     j = *jj;
 L10:
@@ -751,6 +823,20 @@ L10:
 	f4_break_pending = 0;
 	b_1.errtyp = 26;
 	b_1.ibreak = TRUE_;
+	goto L60;
+    }
+/*   E12 BOUNDED THE CAR-CIRCULAR CASE, BECAUSE THAT ONE GROWS THE A-STACK    */
+/*   AND APUSH2'S MARKER STOPS IT.  A CDR-CIRCULAR PAIR PUSHES AND POPS IN    */
+/*   STEP, SO THE STACK NEVER MOVES AND THE WALK RAN FOREVER -- CTRL-C GOT    */
+/*   YOU OUT, BUT NOTHING ELSE DID.  BOUND THE WORK INSTEAD, THE WAY PRIN1    */
+/*   BOUNDS ITS OWN OUTPUT (H1), AND REPORT RUNNING OUT EXACTLY AS AN         */
+/*   A-STACK OVERFLOW IS REPORTED: PLANT MARKER 16 AND ANSWER NIL.  THAT IS   */
+/*   ALREADY WHAT THE CAR-CIRCULAR CASE DOES, SO BOTH NOW GIVE                */
+/*   "--- STACK OVERFLOW", ERRORSET CATCHES THEM, AND NO NEW SYSTEM MESSAGE   */
+/*   IS NEEDED (SYSATOMS HOLDS EXACTLY MAXMES OF THEM).                       */
+    ++nodes;
+    if (nodes > budget) {
+	b_1.stack[b_1.ip - 1] = 16;
 	goto L60;
     }
     if (i__ == j) {
@@ -1106,6 +1192,18 @@ L50:
     if (*iactn == 4 && *ipart == 1) {
 	goto L4000;
     }
+/*   I1: CAR(IPTR) == ARRAY IS THE WHOLE OF THE TYPE TEST ABOVE, AND AN */
+/*   ORDINARY LITERAL ATOM'S CAR IS ITS VALUE CELL -- SO (SETQ ZQ 'LISPF4-ARRAY) */
+/*   MAKES ZQ ANSWER THAT TEST AND ITS PRINT NAME IS THEN DECODED AS AN ARRAY */
+/*   HEADER.  THE TWO HEADER WORDS LIVE AT LWORD1-2 AND LWORD1-1, SO THEY MUST */
+/*   BE INSIDE PNAME BEFORE THEY ARE READ; THE PART BOUNDS THEY YIELD ARE */
+/*   CHECKED AT L20 BELOW.  THIS IS THE SINGLE DECODER FOR AN ARRAY HEADER, */
+/*   THE WAY GETPN IS THE SINGLE DECODER FOR A PRINT NAME, SO ONE TEST HERE */
+/*   COVERS ELT/SETA, GARB'S MARK AND COMPACT PASSES AND MOVE'S RELOCATION -- */
+/*   THE LAST OF WHICH ALSO MAKES A CORRUPT IMAGE SURVIVABLE.  */
+    if (lbyte1 < 1 || *lword1 < 3 || *lword1 > a_1.npname + 1) {
+	goto L8010;
+    }
     lbyte2 = jpname[*lword1 - 3];
     *llen1 = (lbyte2 - lbyte1) / a_1.jbytes - 2;
     if (*ipart < 2) {
@@ -1121,6 +1219,26 @@ L50:
     *llen3 = b_1.pnp[*iptr];
     *llen3 = (abs(*llen3) - lbyte3) / a_1.bytes;
 L20:
+/*   I1: THE PART BOUNDS JUST DECODED ARE ABOUT TO BE USED AS SUBSCRIPTS -- */
+/*   AND GARB'S STEP 6 *WRITES* THROUGH THE PAIR IT GETS FROM ACTION 3.  A */
+/*   FORGED TYPE TAG, OR A CORRUPT IMAGE, YIELDS WHATEVER THE PRINT NAME */
+/*   HAPPENS TO ENCODE, SO REFUSE ANYTHING THAT IS NOT A REAL PART OF PNAME. */
+/*   ONLY THE PARTS ACTUALLY COMPUTED ABOVE ARE TESTED; THE OTHERS STILL HOLD */
+/*   THE PREVIOUS CALL'S VALUES.  ACTION 4 IS EXCLUDED BECAUSE IT BUILDS THE */
+/*   HEADER AS IT GOES, SO ITS LATER WORDS ARE LEGITIMATELY UNWRITTEN.  */
+    if (*iactn <= 3) {
+	if (*llen1 < 0 || *lword1 + *llen1 - 1 > a_1.npname) {
+	    goto L8010;
+	}
+	if (*ipart >= 2 && (*llen2 < 0 || *lword2 < 1 ||
+			    *lword2 + *llen2 - 1 > a_1.npname)) {
+	    goto L8010;
+	}
+	if (*ipart >= 3 && (*llen3 < 0 || *lword3 < 1 ||
+			    *lword3 + *llen3 - 1 > a_1.npname)) {
+	    goto L8010;
+	}
+    }
     switch (*iactn) {
 	case 1:  goto L1000;
 	case 2:  goto L2000;
@@ -1630,7 +1748,7 @@ integer rollin_(integer *lun)
     static integer i__;
     extern /* Subroutine */ int dmpin_(integer *, integer *, integer *,
 	    integer *);
-    static integer idiff1, idiff2, idiff3, bigold, natomo, trail[2];
+    static integer idiff1, idiff2, idiff3, bigold, natomo, trail[2], j;
     extern /* Subroutine */ int dmpin2_(integer *, integer *, integer *, 
 	    integer *);
 #define jpname  ((integer *) b_1.pname)   /*  ((integer *)&b_1 + 1122)   */
@@ -1670,6 +1788,25 @@ integer rollin_(integer *lun)
     }
 /*               FREE STORAGE */
     if (*nfreto - *nfrepo >= a_1.nfreet - a_1.nfreeb) {
+	goto L90;
+    }
+/*   I6: ROLLIN CHECKED THE FIFTEEN HEADER WORDS FOR AGREEMENT AND SIZE AND */
+/*   THEN TRUSTED EVERY POINTER THE FILE CARRIED.  THESE SEVEN DESCRIBE THE  */
+/*   TABLES THAT FOLLOW *AND ARE USED AS SUBSCRIPTS WHILE READING THEM*, SO  */
+/*   THEY MUST BE CHECKED HERE, WHERE L90 STILL MEANS "NOTHING WAS TOUCHED". */
+/*   ONE FLIPPED BYTE IN BASIC.IMG USED TO BE ENOUGH FOR A SIGSEGV -- FIVE   */
+/*   OF 317 SINGLE-BYTE CORRUPTIONS DID IT.  ROLLIN IS ALSO CALLABLE FROM    */
+/*   LISP ON ANY UNIT, AND A SYSOUT ONTO A FULL DISK LEAVES EXACTLY THE KIND */
+/*   OF HALF-VALID FILE THIS COULD NOT SURVIVE.                              */
+    if (*natopo < 1 || *nfrepo < 1 || *jbpo < 1 || *numbpo < 1 ||
+	    *nfreto < 1 || *npnamo < 1) {
+	goto L90;
+    }
+    if (*nfrepo > *nfreto || *natopo >= *nfreto || *numbpo > *npnamo + 1) {
+	goto L90;
+    }
+/*               PRINT NAMES MUST STOP BELOW THE NUMBER AREA */
+    if (*jbpo - 1 > a_1.bytes * (*numbpo - 1)) {
 	goto L90;
     }
 /*               ROLLIN POSSIBLE, MOVE POINTERS AND READ. */
@@ -1714,6 +1851,38 @@ integer rollin_(integer *lun)
 	fprintf(stderr, "Image file is truncated or unreadable; the "
 			"interpreter state is now incomplete.  Stopping.\n");
 	exit(1);
+    }
+/*   I6: NOW THE TABLES THEMSELVES.  PNP IS THE BYTE INDEX OF EACH ATOM'S    */
+/*   PRINT NAME; REHASH READS PNAME THROUGH IT AND MOVE RELOCATES THROUGH IT,*/
+/*   SO IT HAS TO BE NON-DECREASING AND INSIDE THE PRINT-NAME AREA.  CAR AND */
+/*   CDR HOLD LISP POINTERS -- AN ATOM, A CELL OR A NUMBER ENCODING -- AND   */
+/*   ARE NEVER ZERO OR NEGATIVE OUTSIDE A COLLECTION.  (THE COLLECTOR'S MARK */
+/*   BIT IS A SIGN ON PNP, HENCE THE ABS: ROLLOUT COLLECTS FIRST, SO A       */
+/*   WELL-FORMED IMAGE HAS NONE LEFT, BUT ACCEPTING THEM COSTS NOTHING.)     */
+/*   UNLIKE THE HEADER TESTS ABOVE, THIS ONE RUNS AFTER THE TABLES HAVE BEEN */
+/*   READ INTO PLACE, SO THERE IS NO CONSISTENT STATE TO RETURN TO -- THE    */
+/*   TRUNCATION CASE JUST ABOVE HAS THE SAME PROBLEM AND THE SAME ANSWER.    */
+    j = 0;
+    i__1 = a_1.natomp + 1;
+    for (i__ = 1; i__ <= i__1; ++i__) {
+	i__2 = b_1.pnp[i__ - 1];
+	i__2 = abs(i__2);
+	if (i__2 < 1 || i__2 > a_1.jbp || i__2 < j) {
+	    goto L95;
+	}
+	j = i__2;
+    }
+    i__1 = a_1.natomp;
+    for (i__ = b_1.nil; i__ <= i__1; ++i__) {
+	if (carcdr_1.car[i__ - 1] < 1 || carcdr_1.cdr[i__ - 1] < 1) {
+	    goto L95;
+	}
+    }
+    i__1 = a_1.nfreet;
+    for (i__ = a_1.nfreep + 1; i__ <= i__1; ++i__) {
+	if (carcdr_1.car[i__ - 1] < 1 || carcdr_1.cdr[i__ - 1] < 1) {
+	    goto L95;
+	}
     }
 /*             OPTIONAL TRAILER: NATOM AS IT WAS AT ROLLOUT TIME.  IMAGES */
 /*             WRITTEN BEFORE THIS EXISTED SIMPLY END HERE, WHICH IS WHY IT */
@@ -1794,6 +1963,11 @@ L90:
 L91:
     rew_(lun);
     return ret_val;
+/*   I6: A TABLE THAT DOES NOT DESCRIBE A LISP SYSTEM.  SEE THE NOTE ABOVE. */
+L95:
+    fprintf(stderr, "Image file is corrupt (bad atom or cell table); the "
+		    "interpreter state is now incomplete.  Stopping.\n");
+    exit(1);
 } /* rollin_ */
 
 #undef npnamo
@@ -2717,7 +2891,19 @@ L915:
     }
     i__1 = l;
     for (j = 1; j <= i__1 || j == 1; ++j) {
-	if (b_1.prtpos <= b_1.marg) {
+/*   I2: THIS TERPRI USED TO FIRE AT THE RIGHT MARGIN, WHICH SPLIT A NAME     */
+/*   WIDER THAN A LINE ACROSS TWO LINES WITH NOTHING TO SAY SO -- SO MAKEFILE */
+/*   WROTE FILES LOAD COULD NOT READ BACK.  A 78-CHARACTER ATOM CAME BACK AS  */
+/*   TWO ATOMS, AND A 77-CHARACTER STRING CAME BACK 149 CHARACTERS LONG,      */
+/*   PADDED WITH THE READER'S OWN BLANK FILL OUT TO THE READ MARGIN.  A NAME  */
+/*   THAT CANNOT BE MADE TO FIT ON ANY LINE IS NOT A LAYOUT PROBLEM, IT IS    */
+/*   DATA: LET IT OVERRUN THE RIGHT MARGIN AND STAY READABLE.  THE ONLY LIMIT */
+/*   LEFT IS PRBUFF ITSELF, WHICH MUST STILL BE FLUSHED BEFORE IT FILLS --    */
+/*   AND ONE COLUMN BEFORE 300'S OWN LIMIT (IOBUFF-3), SO THAT WHEN CONTROL   */
+/*   RETURNS THERE THERE IS ROOM TO WRITE AND THE LOOP MAKES PROGRESS.  THAT  */
+/*   CEILING IS ABOVE THE 150-COLUMN READ MARGIN, SO ANYTHING THE READER CAN  */
+/*   TAKE BACK IN ONE LINE NOW ROUND-TRIPS.                                   */
+	if (b_1.prtpos <= b_1.iobuff - 4) {
 	    goto L920;
 	}
 	terpri_();
@@ -2783,7 +2969,15 @@ L9100:
 /* OMMON AND INTEGER DECLARATIONS END */
     ie = 0;
     dr = (doublereal) (*r__);
-    if (dr < 0.) {
+/*   A NEGATIVE ZERO IS NOT LESS THAN ZERO, SO THE PLAIN SIGN TEST DROPPED    */
+/*   ITS MINUS AND -0.0 CAME OUT AS "0.".  RATOM READS -0.0 CORRECTLY (SEE   */
+/*   THE F3 NOTE THERE, WHICH NEGATES THE ZERO IT BUILDS), SO THE SIGN OF     */
+/*   ZERO WAS THE ONE FLOAT BIT PATTERN THAT DID NOT SURVIVE PRINT/READ --    */
+/*   AND THEREFORE MAKEFILE/LOAD.  ASK FOR THE SIGN BIT INSTEAD.  THE MINUS   */
+/*   IS EMITTED FIRST AND THEN THE VALUE REJOINS THE ZERO PATH: L3'S          */
+/*   NORMALISATION LOOP MULTIPLIES BY TEN UNTIL THE VALUE REACHES 1, WHICH A  */
+/*   ZERO NEVER DOES.                                                        */
+    if (dr < 0. || signbit(dr)) {
 	goto L2;
     } else if (dr == 0.) {
 	goto L10;
@@ -2794,6 +2988,9 @@ L2:
     dr = -dr;
     b_1.prbuff[b_1.prtpos - 1] = chars_1.iminus;
     ++b_1.prtpos;
+    if (dr == 0.) {
+	goto L10;
+    }
 /*                                      CHOOSE E OR F FORMAT */
 L3:
     s = dr;
@@ -3682,6 +3879,22 @@ L1100:
     return 0;
 L1150:
     b_1.cht = getcht_(&b_1.chr);
+/*   I7: CHTAB HOLDS ONE CHARACTER PER TYPE AND THE EXPONENT MARKER IS `E',   */
+/*   SO 1.5e3 WAS CLASSIFIED AS AN ORDINARY LETTER AND READ AS A LITERAL      */
+/*   ATOM.  MATOM UPSHIFTS THE TOKEN LONG AFTER RATOM HAS DECIDED IT IS NOT A */
+/*   NUMBER, SO THE DIAGNOSTIC EVEN NAMED 1.5E3 -- A FORM THE READER ACCEPTS  */
+/*   AND THE PRINTER PRODUCES.  WHEN THE UPSHIFT OPTION IS ON (DREG(4) = T),  */
+/*   LET A LOWERCASE LETTER TAKE ITS UPPERCASE COUNTERPART'S TYPE.  ONLY THE  */
+/*   DEFAULT TYPE 10 IS PROMOTED, SO A CHTAB ENTRY SET TO A LOWERCASE         */
+/*   CHARACTER STILL MEANS WHAT IT SAYS.  AS SHIPPED, `E' IS THE ONLY ENTRY   */
+/*   THIS CAN REACH -- %, ~, # AND " HAVE NO LOWERCASE FORM.                  */
+    if (b_1.cht == 10 && b_1.dreg[3] == b_1.t) {
+	j = b_1.chr;
+	upcase_(&j, &c__1);
+	if (j != b_1.chr) {
+	    b_1.cht = getcht_(&j);
+	}
+    }
 /*                                      DON'T RETURN IF  %  IS READ */
     if (b_1.cht == 23) {
 	goto L1100;
@@ -4848,15 +5061,18 @@ L50:
     naleft = garb_(&c__3) - 1;
     nbleft = a_1.bytes * (a_1.numbp - 2) - (a_1.jbp - 1) - l;
     if (naleft < 0 || nbleft < 0) {
-	goto L56;
+	goto L55;
     }
     if (! b_1.ibreak) {
 	b_1.errtyp = 0;
     }
-    if (naleft < 10) {
-	b_1.errtyp = 28;
-    }
-    if (nbleft < 50) {
+/*   I8: THE ATOM TABLE AND THE PRINT-NAME BYTES ARE TWO HALVES OF ONE AREA  */
+/*   AND EITHER CAN BE THE ONE THAT FILLED, SO BOTH GET MESSAGE 37,          */
+/*   "BIGNUM/ATOM SPACE ALMOST EXHAUSTED".  THE ATOM-TABLE HALF USED TO RAISE */
+/*   28, "ARRAY INDEX OUT OF BOUNDS" -- ARRUTL'S MESSAGE, WITH NOTHING TO DO */
+/*   WITH ATOM SPACE.  FAITHFULLY TRANSLATED FROM THE FORTRAN                */
+/*   (LISPF42.F:2311), SO IT HAD ALWAYS BEEN THERE.                          */
+    if (naleft < 10 || nbleft < 50) {
 	b_1.errtyp = 37;
     }
     if (b_1.errtyp > 0) {
@@ -4868,8 +5084,22 @@ L50:
 	goto L100;
     }
 /*                                      ATOM SPACE EMPTY. NIL RETURNED */
+/*   AND WHEN IT IS FULL RATHER THAN NEARLY FULL, SAY WHICH HALF: 33 IS       */
+/*   "ATOM SPACE EMPTY. NIL RETURNED", WHICH SENDS A USER TO -A, AND THE      */
+/*   PRINT-NAME BYTES ARE RAISED WITH -P.  CONCAT AT -P9000 FILLS THE BYTES   */
+/*   WITH THE ATOM TABLE STILL HALF EMPTY AND USED TO REPORT 33 ANYWAY.       */
+L55:
+    b_1.errtyp = 33;
+    if (naleft >= 0) {
+	b_1.errtyp = 37;
+    }
+    goto L57;
+/*   REACHED WITH A 33 ALREADY PENDING FROM AN EARLIER CALL, BEFORE NALEFT    */
+/*   AND NBLEFT HAVE BEEN COMPUTED FOR THIS ONE.  KEEP THE MESSAGE THAT IS    */
+/*   ALREADY ON ITS WAY; DO NOT CONSULT THE STALE COUNTS.                     */
 L56:
     b_1.errtyp = 33;
+L57:
     b_1.ibreak = TRUE_;
     imatom = b_1.nil;
 /*               RESET POINTER IN ABUFF AND RETURN(IMATOM) */
@@ -5100,6 +5330,16 @@ integer nchars_(integer *s, integer *iflg)
     b_1.iflg1 = a_1.numadd;
     b_1.prtpos = 1;
 L2:
+/*   I4: THIS SPINE WALK HAS NO CYCLE ESCAPE, SO (PACK CIRC) RAN FOREVER AND */
+/*   IGNORED EVERY SIGINT.  RAISE THE FLAG AND TAKE THE NORMAL EXIT: THE     */
+/*   CALLER'S 12440 STILL HAS TO PUT PRBUFF AND PRTPOS BACK, AND IT TESTS    */
+/*   IBREAK ONCE IT HAS.                                                    */
+    if (f4_break_pending) {
+	f4_break_pending = 0;
+	b_1.errtyp = 26;
+	b_1.ibreak = TRUE_;
+	goto L4;
+    }
     if (*s <= b_1.nil) {
 	goto L4;
     }
@@ -5883,7 +6123,13 @@ L1000:
     }
     mkcha_(&a2, c2, (ftnlen)XCALL_NAMELEN, &len2);
     *x = carcdr_1.cdr[*x - 1];
-    if (*x <= a_1.natomp || *x > a_1.nfreet) {
+/*   THE SPINE CELL MUST BE A CELL: THE BOUNDARY IS NATOM, THE SIZE OF THE   */
+/*   ATOM AREA, NOT NATOMP, THE PART OF IT IN USE.  THE TWO TESTS ABOVE GET  */
+/*   THIS RIGHT AND THESE TWO DID NOT; THE LOOSER FORM ADMITTED AN UNUSED    */
+/*   ATOM SLOT, WHICH IS IN BOUNDS AND SO WAS HARMLESS, BUT THE FOUR SHOULD  */
+/*   AGREE.  (THE *ELEMENT* TESTS BESIDE THEM CORRECTLY USE NATOMP: THEY ASK */
+/*   FOR A LITERAL ATOM THAT EXISTS.)                                        */
+    if (*x <= a_1.natom || *x > a_1.nfreet) {
 	goto L10000;
     }
     a3 = carcdr_1.car[*x - 1];
@@ -5892,7 +6138,7 @@ L1000:
     }
     mkcha_(&a3, c3, (ftnlen)XCALL_NAMELEN, &len3);
     *x = carcdr_1.cdr[*x - 1];
-    if (*x <= a_1.natomp || *x > a_1.nfreet) {
+    if (*x <= a_1.natom || *x > a_1.nfreet) {
 	goto L10000;
     }
     a4 = carcdr_1.car[*x - 1];

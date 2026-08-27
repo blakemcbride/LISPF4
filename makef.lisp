@@ -22,7 +22,7 @@
 (LOAD
   [LAMBDA (FILE LDFLG PRINTFLG)
           (PROG ([AL (SUBST LDFLG '* '((LDFLG . *] FILENR UNIT X)
-                (OR (SETQ FILENR (OPEN 20 FILE 'OLD 'FORMATTED))
+                (OR (SETQ FILENR (OPEN0 FILE T NIL))
                     (PROGN (PRINTL-SP "CAN NOT OPEN" FILE) (RETURN)))
                 (SETQ UNIT (INUNIT FILENR))
                 (IOTAB 2 (IOTAB 4))
@@ -117,7 +117,7 @@
                 (OR FNSV VARSV
                     (PROGN (PRINTL-SP 'BOTH FNS 'AND VARS 'EMPTY)
                            (RETURN)))
-                (OR (SETQ FILENR (OPEN 20 XFILE 'NEW 'FORMATTED))
+                (OR (SETQ FILENR (OPEN0 XFILE NIL NIL))
                     (PROGN (PRINTL-SP "CAN NOT OPEN" XFILE) (RETURN)))
                 (COND [(CAR (ERRORSET '(NUMBERP (EVAL GEN)) NIL))
                         (SETQ GENV (ADD1 (EVAL GEN]

@@ -38,7 +38,7 @@ Scratch output lands in `tests/.work/` (gitignored) — `NAME.out` is the raw se
 ## Expected result today
 
 ```
-passed: 78   failed: 0   known failures: 0   unexpected passes: 0
+passed: 89   failed: 0   known failures: 0   unexpected passes: 0
 ```
 
 Everything found so far is fixed, so there are no `.bug` markers left. The driver exits 0
@@ -138,7 +138,7 @@ Last run 2026-08-27, ASan + UBSan + `float-cast-overflow`, strict options. (GCC 
 `float-cast-overflow` out of the default `-fsanitize=undefined` set and it is what catches
 E16, so it is now in `DBGFLAGS`.) **No reports** from any of the following:
 
-- the full 78-case suite;
+- the full 89-case suite;
 - a sweep of every SUBR against 16 structurally malformed arguments and 8 malformed second
   arguments -- 12 528 forms. The same sweep finds 64 segfaults on the pre-fix binary;
 - 6 000 randomly generated nested forms over the builtin table, including dotted tails at
@@ -244,9 +244,9 @@ exact-output case because the defect is a silent write outside the buffer, not a
 `e17-listspace` needs `ulimit -s 1024` to show anything -- the leak is only visible against
 a bound -- and takes about a second.
 
-`e12-equal` covers what was fixed, not everything that is wrong: `EQUAL` still has no cycle
-detection, so the CDR-circular half of the case asserts only that SIGINT gets you out and
-the interpreter recovers.
+`e12-equal` covers what E12 fixed, not everything that was wrong: the CDR-circular half of
+the case asserts only that SIGINT gets you out and the interpreter recovers. `EQUAL` still
+has no cycle *detection*, but the walk is now bounded -- see `j2-eqcycle`.
 
 ## H-series cases (fifth bug-fix pass, 2026-08-27)
 
@@ -283,6 +283,77 @@ LISPF4=/tmp/prefix/lispf4 LISPF4_IMG=/tmp/prefix/basic.img ROOT=/tmp/prefix \
 `h1-circprint` writes to a file rather than a pipe on purpose: against a pipe whose
 reader never fills, a runaway print looks like a hang instead of a size, and `wc -c`
 reports whatever the pipe happened to carry.
+
+## I-series cases (sixth bug-fix pass, 2026-08-27)
+
+Eight cases covering `Bugs6.md` I1-I8. Every one was checked against the shipped pre-fix
+`Linux/lispf4` + `Linux/basic.img` and fails there, so all eight are detectors.
+`KnowledgeBase.md` -> *Sixth bug-fix pass (2026-08-27)* explains the fixes. (I9 is two
+stale function names in `Documentation/UsersGuide.txt` and has nothing to run.)
+
+| Case | What it pins down | How it fails pre-fix |
+|---|---|---|
+| `i1-fakearray` | a forged type tag, and the bounds `ARRUTL` hands back | `(SETQ ZQ 'LISPF4-ARRAY)` then `(SYSOUT "x.img")` segfaults and leaves the target file **0 bytes long** |
+| `i2-longname` | `MAKEFILE`/`LOAD` and `PRINT` on a datum wider than a line | a 100-character atom comes back as two atoms; a 100-character string comes back 172 characters long |
+| `i3-exhaust` | the register file cleared at the reset label | `(REVERSE circ)` at `-c20000` never stops -- 549 248 resets, 40 MB of output, immune to SIGINT |
+| `i4-circint` | the interrupt poll in nine list-walking builtins | each of `LENGTH LAST MEMB MEMBER ASSOC SASSOC TAILP ADDLIST SUBPAIR` on a circular list ignores SIGINT and has to be killed |
+| `i5-copyoflo` | `SUBPR` giving back the A-stack it consumed | `(COPY <900 elements>)` aborts with a bare `--- Reset`, no message, and `NLSETQ` cannot catch it |
+| `i6-corruptimg` | `ROLLIN` validating the tables, not just the header | one flipped byte at offset 7850 segfaults; 5 of 317 single-byte corruptions do |
+| `i7-lowercase` | a lowercase exponent in a float literal | `1.5e3` reads as a literal atom, and the diagnostic then names `1.5E3` -- a number the system prints itself |
+| `i8-atomfull` | the message number for a nearly full atom table | reports `--- Array index out of bounds`, which is `ARRUTL`'s message |
+
+`i4-circint` sleeps three seconds before each SIGINT rather than waiting for a marker in
+the transcript: output to a file is block buffered, so polling for the marker waits for the
+buffer rather than for the loop and made the case eight times slower for no extra
+certainty. It runs nine interpreters and takes about 35 seconds.
+
+`REVERSE`, `APPEND`, `PACK` and `COPY` are in the same family as the nine builtins
+`i4-circint` drives but are not in its list, because each of them ends on its own before a
+SIGINT can land: `REVERSE` and `APPEND` exhaust list space (that is `i3-exhaust`), `PACK`
+fills the print-name area, and `COPY` overflows the A-stack (that is `i5-copyoflo`). Their
+polls were checked by hand.
+
+`i6-corruptimg` sweeps the whole image at a 313-byte stride and asserts only that no
+corruption produces a *signal* -- loading and being refused are both acceptable outcomes.
+The fix moves the count from 311 loads / 1 refusal / 5 crashes to 236 loads / 81 refusals /
+0 crashes: the extra refusals are corruptions that used to load into a quietly broken
+state.
+
+`i2-longname` also asserts that plain `PRINT` emits a 100-character atom on one line. The
+fix is "do not split", so a name too wide for the line now overruns the right margin
+rather than being broken across two. The remaining ceiling is the print buffer
+(`IOBUFF-4`, 156 columns), which is above the 150-column read margin, so anything the
+reader can take in one line round-trips.
+
+## J-series cases (seventh bug-fix pass, 2026-08-27)
+
+Three cases, plus a second half added to `i8-atomfull`. These are not from a new analysis:
+they are the leftovers that six passes had recorded as known and unfixed. All three fail
+on the shipped pre-fix `Linux/lispf4` + `Linux/basic.img`. `KnowledgeBase.md` ->
+*Seventh bug-fix pass (2026-08-27)* explains the fixes, and lists what was deliberately
+left alone and why.
+
+| Case | What it pins down | How it fails pre-fix |
+|---|---|---|
+| `j1-nestload` | `LOAD` and `MAKEFILE` asking `OPEN0` for a free unit | a `LOAD` inside a `LOAD` loads the inner file and then silently drops the rest of the outer one; same for a `MAKEFILE` inside a `LOAD` |
+| `j2-eqcycle` | `EQUAL`'s per-call node budget, and the three builtins that call it in a loop | `(EQUAL circ1 circ2)` never returns; the case times out |
+| `j3-negzero` | the sign of a float zero surviving `PRINT`/`READ` | `-0.0` reads as a float and prints as `0.`, so the sign is lost on the way out |
+
+`j2-eqcycle` is deliberately capped at **four** budget-exhausting calls. `L25090` halves
+`MIDDL` on every stack-overflow report and `MIDDL` is only restored at the reset label, so
+the fifth report in one session resets it -- 150, 75, 37, 18, 9, reset. That ladder is by
+design (it is what lets a report get out when the A-stack really is full, see `i5-copyoflo`)
+and predates this pass, but it does mean a case that provokes stack overflows has to count
+them.
+
+`j3-negzero` also checks that `(ZEROP -0.0)` is `T` and `(MINUSP -0.0)` is `NIL`; the fix
+changes the printed form, not the arithmetic. `f3-floatzero.exp` was updated in the same
+pass for the same reason -- its first line now reads `(0. -0. 0. 0. NIL)`. That case still
+fails hard on the pre-fix binary, where every float zero came back as the integer 0.
+
+`xcall_`'s four spine tests were made to agree (two used `NATOMP` where the boundary is
+`NATOM`) with no case: the looser form admitted an unused atom slot, which is in bounds, so
+there is no observable behaviour to detect.
 
 ## Variance cases
 
