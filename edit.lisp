@@ -54,9 +54,11 @@
   
 (EDITP
   (NLAMBDA (A . L)
-           (PROG (EXIT-TYPE VAL)
-                 (SETQ VAL (EDITS-INT (GETPROPLIST A) L))
-                 (AND (EQ EXIT-TYPE 'STOP) (SETPROPLIST A VAL))
+           (PROG ((PL (GETPROPLIST A)) EXIT-TYPE VAL)
+                 (SETQ VAL (EDITS-INT PL (COPY PL) L))
+                 (SELECTQ EXIT-TYPE
+                   ((OK SAVE STOP) (SETPROPLIST A VAL))
+                   NIL)
                  (RETURN VAL))))
   
 (EDITPR

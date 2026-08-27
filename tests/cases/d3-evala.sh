@@ -1,6 +1,7 @@
 # D3: EVALA and APPLYA jumped back to the label they were already at when the
 # parameter stack ran low, wedging the interpreter in a loop that never
-# reaches the SIGINT poll in EVAL.  Small -s makes it reproducible.
+# reaches the SIGINT poll in EVAL.  Small -s makes it reproducible -- 500 is
+# the smallest MAIN accepts (G4), and 600 a-list entries still overflow it.
 
 cat > evala.lsp <<'EOF'
 (PROGN (SYSFLAG 1 NIL) (PRINTLEVEL 2) (PRINTLENGTH 3) (QUOTE READY))
@@ -15,9 +16,9 @@ cat > evala.lsp <<'EOF'
 EOF
 
 if command -v timeout > /dev/null 2>&1; then
-	timeout 60 "$LISPF4" -s400 "$LISPF4_IMG" < evala.lsp > out.txt 2>&1
+	timeout 60 "$LISPF4" -s500 "$LISPF4_IMG" < evala.lsp > out.txt 2>&1
 else
-	"$LISPF4" -s400 "$LISPF4_IMG" < evala.lsp > out.txt 2>&1
+	"$LISPF4" -s500 "$LISPF4_IMG" < evala.lsp > out.txt 2>&1
 fi
 st=$?
 if [ "$st" -eq 124 ]; then

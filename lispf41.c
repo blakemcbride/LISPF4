@@ -179,6 +179,9 @@ static integer c__40 = 40;
     static integer nch, jb2;
     extern integer get_(integer *, integer *);
     static integer ict, min__, ipl, max__, if42;
+/*   G3: how many FUNARG wrappers have been peeled off the current function.  */
+/*   Bounded so that a self-referential block cannot spin the unwrapping loop. */
+    static integer nfunarg;
     extern /* Subroutine */ int rew_(integer *);
     static integer ist, ipl2;
 
@@ -256,7 +259,14 @@ L1:
     b_1.rdpos = 1000;
     b_1.lunin = b_1.lunins;
     b_1.form = b_1.nil;
+/*   G4: MAIN now refuses a stack below 500, so HILL-150 is comfortably       */
+/*   positive.  Clamp anyway: a negative HILLW makes an empty parameter stack */
+/*   test as full, and the "fatal" path resets to L1, which recomputes HILLW  */
+/*   from HILL and starts the whole cycle again -- an infinite error stream.  */
     jaan_1.hillw = jaan_1.hill - 150;
+    if (jaan_1.hillw < 1) {
+	jaan_1.hillw = 1;
+    }
     b_1.middl = a_1.nstack / 10;
     b_1.isplft = 400;
     b_1.ibreak = FALSE_;
@@ -813,6 +823,7 @@ L1785:
     jaan_1.env = jaan_1.tops;
     b_1.form = jaan_1.jill[index];
     l = carcdr_1.car[b_1.form - 1];
+    nfunarg = 0;
 L1776:
     if (l <= a_1.natom) {
 	goto L1786;
@@ -827,6 +838,12 @@ L1776:
     b_1.temp1 = carcdr_1.car[l - 1];
     if (b_1.temp1 != b_1.funarg) {
 	goto L1788;
+    }
+/*   G3: a block whose function part leads back to itself would spin here --   */
+/*   the loop chases pointers and pushes nothing, so no stack guard stops it.  */
+    ++nfunarg;
+    if (nfunarg > 100) {
+	goto L2230;
     }
     b_1.temp1 = carcdr_1.cdr[l - 1];
     if (b_1.temp1 <= a_1.natom || b_1.temp1 > a_1.nfreet) {
@@ -856,6 +873,15 @@ L1787:
 L1788:
     if (ll <= a_1.natom || ll > a_1.nfreet) {
 	goto L2230;
+    }
+/*   G3: L1776 unwraps a FUNARG only when CAR of the form is the block itself. */
+/*   A block reached through an atom's function cell -- (PUTD 'CLO (FUNCTION   */
+/*   ... )) -- arrives here instead, and the CDDR below then took the closure's */
+/*   A-LIST as the body: "Undefined function" for a non-empty A-LIST, and a     */
+/*   silent NIL for an empty one.  Hand it back to the unwrapping loop.         */
+    if (carcdr_1.car[ll - 1] == b_1.funarg) {
+	l = ll;
+	goto L1776;
     }
     b_1.arg = carcdr_1.cdr[ll - 1];
     if (b_1.arg <= a_1.natom || b_1.arg > a_1.nfreet) {
@@ -1724,6 +1750,12 @@ L11010:
 /* RECLAIM */
 
 L11020:
+/*   F11: the clearing loop below wipes ARG, which is also what SYSERROR      */
+/*   prints as the offending value, so (RECLAIM 5) used to report             */
+/*   "RECLAIM - NIL".  Validate first, clear second.                          */
+    if (*n < 0 || *n > 3) {
+	goto L25000;
+    }
     i__1 = b_1.nargs;
     for (i__ = 1; i__ <= i__1 || i__ == 1; ++i__) {
 	if (i__ == 4) {
@@ -1735,9 +1767,6 @@ L11020:
 L11030:
 	;
     }
-    if (*n < 0 || *n > 3) {
-	goto L25000;
-    }
     i__1 = garb_(n);
     *ires = mknum_(&i__1);
     goto L998;
@@ -1746,6 +1775,13 @@ L11030:
 
 L11050:
     if (*n < 1 || *n > b_1.maxlun) {
+	goto L25000;
+    }
+/*   G6: an image must come from a file the caller opened.  UNIT 5 WOULD READ */
+/*   IT OUT OF THE TERMINAL, AND UNIT 4 OUT OF SYSATOMS; A UNIT THAT IS NOT   */
+/*   OPEN AT ALL SILENTLY PRODUCED "NOT AN IMAGE" INSTEAD OF SAYING SO.       */
+    if (*n == b_1.lunsys || *n == b_1.lunins || *n == b_1.lunuts
+	    || ! f4_isopen(*n)) {
 	goto L25000;
     }
     *ires = rollin_(n);
@@ -1758,6 +1794,14 @@ L11050:
 
 L11060:
     if (*n < 1 || *n > b_1.maxlun) {
+	goto L25000;
+    }
+/*   G6: ROLLOU ignores every write error, so a unit that is not open ran a  */
+/*   full compacting collection and then answered N as though the image had  */
+/*   been written.  Refuse it, and refuse the reserved units -- (ROLLOUT 6)  */
+/*   sprayed a binary image at the terminal.                                 */
+    if (*n == b_1.lunsys || *n == b_1.lunins || *n == b_1.lunuts
+	    || ! f4_isopen(*n)) {
 	goto L25000;
     }
     rollou_(n);
@@ -2202,22 +2246,29 @@ L12100:
 	goto L25010;
     }
     irflag = b_1.nil;
-    r__ = gtreal_(&b_1.arg, &i__);
-    s = gtreal_(&b_1.arg2, &j);
-    if (r__ != 0.f || s != 0.f) {
-	goto L12105;
+/*   F4: an operand above BIGNUM is a small integer, one below it is a float. */
+/*   The old test was "GTREAL returned 0.0", which a float zero also passes,  */
+/*   so (PLUS 0.0 1) came back as the *integer* 1.  And the mixed case used   */
+/*   to convert the integer with (real) -- a 24-bit mantissa -- before        */
+/*   subtracting, throwing away every bit above 2**24 in advance of the       */
+/*   operation rather than after it.  Combine in DOUBLEREAL and let MKREAL do */
+/*   the single rounding at L3120.                                            */
+    dr = gtreal_(&b_1.arg, &i__);
+    ds = gtreal_(&b_1.arg2, &j);
+    if (b_1.arg > a_1.bignum && b_1.arg2 > a_1.bignum) {
+	*n = i__ - j;
+	goto L3110;
     }
-    *n = i__ - j;
-    goto L3110;
-L12105:
+/*                                      MIXED, OR BOTH FLOATS (L12105) */
     irflag = b_1.t;
-    if (r__ == 0.f) {
-	r__ = (real) i__;
+    if (b_1.arg > a_1.bignum) {
+	dr = (doublereal) i__;
     }
-    if (s == 0.f) {
-	s = (real) j;
+    if (b_1.arg2 > a_1.bignum) {
+	ds = (doublereal) j;
     }
-    r__ -= s;
+    dr -= ds;
+    r__ = (real) dr;
     goto L3110;
 
 /* ELT */
@@ -2732,28 +2783,29 @@ L12540:
 	goto L25010;
     }
     irflag = b_1.nil;
-    r__ = gtreal_(&b_1.arg, &i__);
-    s = gtreal_(&b_1.arg2, &j);
-    if (r__ != 0.f || s != 0.f) {
-	goto L12545;
+/*   F4: see L12100. */
+    dr = gtreal_(&b_1.arg, &i__);
+    ds = gtreal_(&b_1.arg2, &j);
+    if (b_1.arg > a_1.bignum && b_1.arg2 > a_1.bignum) {
+	if (j == 0) {
+	    goto L25010;
+	}
+	*n = i__ / j;
+	goto L3110;
     }
-    if (j == 0) {
-	goto L25010;
-    }
-    *n = i__ / j;
-    goto L3110;
-L12545:
+/*                                      MIXED, OR BOTH FLOATS (L12545) */
     irflag = b_1.t;
-    if (r__ == 0.f) {
-	r__ = (real) i__;
+    if (b_1.arg > a_1.bignum) {
+	dr = (doublereal) i__;
     }
-    if (s == 0.f) {
-	s = (real) j;
+    if (b_1.arg2 > a_1.bignum) {
+	ds = (doublereal) j;
     }
-    if (s == 0.f) {
+    if (ds == 0.) {
 	goto L25010;
     }
-    r__ /= s;
+    dr /= ds;
+    r__ = (real) dr;
     goto L3110;
 
 /* RPLACA */
@@ -3373,11 +3425,15 @@ L15146:
 	goto L25026;
     }
     jndex = a_1.numbp - 1;
-    r__ = gtreal_(&b_1.arg3, &i__);
-    if (r__ == 0.f) {
-	r__ = (real) i__;
+/*   F4: an array's real part is a REAL slot, so narrowing is unavoidable    */
+/*   here -- but it should be one correctly-rounded conversion of the        */
+/*   integer, not a rounding of an already-rounded value, and a float zero   */
+/*   argument must not be mistaken for an integer.                           */
+    dr = gtreal_(&b_1.arg3, &i__);
+    if (b_1.arg3 > a_1.bignum) {
+	dr = (doublereal) i__;
     }
-    b_1.pname[jndex - 1] = r__;
+    b_1.pname[jndex - 1] = (real) dr;
     ireg = 3;
 L15148:
     if (b_1.arg2 <= a_1.nfreet) {
@@ -3501,6 +3557,7 @@ L16010:
 
 L16040:
     *n = 0;
+    dr = 0.;
     irflag = b_1.nil;
     if (iargs == 0) {
 	goto L3105;
@@ -3513,8 +3570,11 @@ L16040:
 	if (ist <= a_1.nfreet) {
 	    goto L25040;
 	}
-	s = gtreal_(&ist, &j);
-	if (s != 0.f || irflag != b_1.nil) {
+/*   F4: see L12100.  The running total used to live in R -- a 24-bit        */
+/*   mantissa -- so a long sum rounded at every step instead of once at the  */
+/*   end, and a float zero argument was mistaken for an integer.             */
+	ds = gtreal_(&ist, &j);
+	if (ist <= a_1.bignum || irflag != b_1.nil) {
 	    goto L16044;
 	}
 	if ((j > 0 && *n > a_1.maxbig - j) || (j < 0 && *n < -a_1.maxbig - j)) {
@@ -3528,14 +3588,17 @@ L16044:
 	    goto L16046;
 	}
 	irflag = b_1.t;
-	r__ = (real) (*n);
+	dr = (doublereal) (*n);
 L16046:
-	if (s == 0.f) {
-	    s = (real) j;
+	if (ist > a_1.bignum) {
+	    ds = (doublereal) j;
 	}
-	r__ += s;
+	dr += ds;
 L16060:
 	;
+    }
+    if (irflag != b_1.nil) {
+	r__ = (real) dr;
     }
     goto L3105;
 
@@ -3566,6 +3629,7 @@ L16070:
 
 L16080:
     *n = 1;
+    dr = 1.;
     irflag = b_1.nil;
     if (iargs == 0) {
 	goto L3105;
@@ -3578,8 +3642,9 @@ L16080:
 	if (ist <= a_1.nfreet) {
 	    goto L25040;
 	}
-	s = gtreal_(&ist, &j);
-	if (s != 0.f || irflag != b_1.nil) {
+/*   F4: see L12100 and L16040. */
+	ds = gtreal_(&ist, &j);
+	if (ist <= a_1.bignum || irflag != b_1.nil) {
 	    goto L16084;
 	}
 	if (j != 0) {
@@ -3596,14 +3661,17 @@ L16084:
 	    goto L16086;
 	}
 	irflag = b_1.t;
-	r__ = (real) (*n);
+	dr = (doublereal) (*n);
 L16086:
-	if (s == 0.f) {
-	    s = (real) j;
+	if (ist > a_1.bignum) {
+	    ds = (doublereal) j;
 	}
-	r__ *= s;
+	dr *= ds;
 L16090:
 	;
+    }
+    if (irflag != b_1.nil) {
+	r__ = (real) dr;
     }
     goto L3105;
 /* ----------------------------------------------------------------------- */
@@ -3692,7 +3760,13 @@ L18015:
     *ires = cons_(&b_1.funarg, &i__1);
     goto L999;
 L18017:
-    i__1 = cons_(&icar, &b_1.nil);
+/*   G5: an explicitly empty variable list used to build the two-element block */
+/*   (FUNARG f), and every consumer wants three -- L1818 answers "Faulty       */
+/*   funarg block" for it.  Emit (FUNARG f NIL), the same shape the non-empty  */
+/*   case builds; L1821 skips a NIL a-list and L1830's write-back loop ends    */
+/*   immediately, so it applies exactly like the plain function.               */
+    i__2 = cons_(&b_1.nil, &b_1.nil);
+    i__1 = cons_(&icar, &i__2);
     *ires = cons_(&b_1.funarg, &i__1);
     goto L999;
 

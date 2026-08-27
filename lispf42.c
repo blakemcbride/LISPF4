@@ -149,7 +149,9 @@ static struct { integer fill; char val[8+1]; char fill2[3]; } c_b98_st = { 0,
 	"SYSATOMS" };
 #define c_b98 c_b98_st.val
 static integer c__15 = 15;
-static real c_b239 = 1.f;
+/*   F2: C_B239 held the constant 1.0 that PRIFLO's digit loop took FMOD by.  */
+/*   That loop now works in DOUBLEREAL and uses the literal 1., so the REAL   */
+/*   constant has no remaining use.                                          */
 static integer c__4 = 4;
 static integer c__24 = 24;
 static integer c__32 = 32;
@@ -310,9 +312,20 @@ int	main(int argc, char *argv[])
 /*  Reject degenerate configurations before allocating.  NPNAME must exceed
     NATOM because DPNP = NPNAME-NATOM maps atom indices into PNAME, and
     NFREET must leave room for the cons cells above the atoms.  The last
-    test keeps BIGNUM = NFREET+NATOM and ISMALL well inside INTEGER range.  */
+    test keeps BIGNUM = NFREET+NATOM and ISMALL well inside INTEGER range.
+
+    G4: NSTACK used to be allowed down to 100, and the interpreter cannot run
+    in that.  LISPF4 reserves a fixed 150-slot margin (HILLW = HILL - 150) and
+    tests it on every EVAL, so at 150 or less an *empty* parameter stack already
+    reads as full: the overflow handler escalates, hits "fatal", resets to L1,
+    which puts HILLW back where it was -- an infinite stream of "Parameter stack
+    owerflow" that never reads standard input and never exits.  Above 150 it no
+    longer loops but still reports overflow on programs that fit easily; 300 was
+    the smallest value that ran (FIB 10) cleanly, so 500 leaves real headroom.
+    -c/-a/-p do not need a bound like this because ROLLIN rejects a
+    configuration too small for the image; the stack is not part of the image.  */
     if (a_1.natom  < 100                    ||
-	a_1.nstack < 100                    ||
+	a_1.nstack < 500                    ||
 	a_1.npname < a_1.natom + 100        ||
 	a_1.nfreet < a_1.natom + 1000       ||
 	(double) a_1.nfreet + (double) a_1.natom > 1.0e9) {
@@ -845,6 +858,9 @@ integer getpn_(integer *x, integer *main, integer *jb, integer *ipl)
 
     /* Local variables */
     static integer l, ii;
+/*   F1: the substring's own offset and length, and the length of the string  */
+/*   it is a substring of.                                                    */
+    static integer ioff, ilen, imax;
     extern integer getnum_(integer *);
 
 /* ----- */
@@ -869,31 +885,51 @@ integer getpn_(integer *x, integer *main, integer *jb, integer *ipl)
 	goto L9020;
     }
 /*                                      TAKE CARE OF THE SUBSTR CASE */
+/*   F1: A SUBSTRING'S DESCRIPTOR -- (MAIN OFFSET . LENGTH) -- IS THREE       */
+/*   ORDINARY CONS CELLS, AND (CDR S) HANDS THEM TO LISP.  RPLACA/RPLACD      */
+/*   REFUSE THE SUBSTRING *ATOM*, BUT NOT ITS DESCRIPTOR CELLS, SO ANY        */
+/*   PROGRAM CAN CHOOSE THE OFFSET AND LENGTH THIS ROUTINE HANDS TO EVERY     */
+/*   STRING OPERATION IN THE SYSTEM.  GETPN IS THE SINGLE DECODER, SO ONE     */
+/*   BOUNDS TEST HERE CLOSES PRINT/UNPACK/PACK/CONCAT/NTHCHAR/MKATOM (READS)  */
+/*   AND RPLSTRING (A WRITE AT A CALLER-CHOSEN ADDRESS) AT ONCE.              */
     l = carcdr_1.cdr[*x - 1];
-    if (l > a_1.nfreet) {
+    if (l <= a_1.natom || l > a_1.nfreet) {
 	goto L9010;
     }
     *main = carcdr_1.car[l - 1];
-    if (*main > a_1.natom) {
+    if (*main < b_1.nil || *main > a_1.natom) {
 	goto L9010;
     }
     if (carcdr_1.car[*main - 1] != b_1.string) {
 	goto L9010;
     }
     l = carcdr_1.cdr[l - 1];
-    if (l > a_1.nfreet) {
+    if (l <= a_1.natom || l > a_1.nfreet) {
 	goto L9010;
     }
-    if (carcdr_1.car[l - 1] <= a_1.nfreet || carcdr_1.cdr[l - 1] <= 
-	    a_1.nfreet) {
+/*                                      OFFSET AND LENGTH MUST BE GENUINE */
+/*                                      SMALL INTEGERS.  THE OLD TEST WAS */
+/*                                      "> NFREET", WHICH A FLOAT PASSES -- */
+/*                                      AND GETNUM THEN CLAMPS IT TO MAXBIG. */
+    if (carcdr_1.car[l - 1] <= a_1.bignum || carcdr_1.cdr[l - 1] <=
+	    a_1.bignum) {
+	goto L9010;
+    }
+    ii = carcdr_1.car[l - 1];
+    ioff = getnum_(&ii);
+    ii = carcdr_1.cdr[l - 1];
+    ilen = getnum_(&ii);
+/*                                      AND THE WINDOW MUST LIE INSIDE THE */
+/*                                      STRING IT IS A WINDOW ONTO, WHOSE */
+/*                                      LENGTH IS RIGHT HERE IN PNP. */
+    imax = b_1.pnp[*main] - b_1.pnp[*main - 1];
+    if (ioff < 1 || ilen < 0 || ilen > imax || ioff - 1 > imax - ilen) {
 	goto L9010;
     }
 /*                                      GET BYTE ADDR */
-    ii = carcdr_1.car[l - 1];
-    *jb = b_1.pnp[*main - 1] + getnum_(&ii) - 1;
+    *jb = b_1.pnp[*main - 1] + ioff - 1;
 /*                                      GET BYTE LENGTH */
-    ii = carcdr_1.cdr[l - 1];
-    *ipl = getnum_(&ii);
+    *ipl = ilen;
     goto L9030;
 /*                                      EXITS. */
 L9010:
@@ -1035,7 +1071,14 @@ L50:
 /* OMMON AND INTEGER DECLARATIONS */
 /* OMMON AND INTEGER DECLARATIONS END */
 
-    if (b_1.ibreak) {
+/*   G2: A PENDING ERROR MUST STOP ACTIONS 1 AND 2, WHICH READ AND WRITE AN */
+/*   ARRAY ELEMENT ON LISP'S BEHALF AND WOULD OTHERWISE OVERWRITE ERRTYP.    */
+/*   ACTIONS 3 AND 4 ARE PURE BOOKKEEPING AND THEIR ONLY CALLERS ARE GARB    */
+/*   AND MOVE, WHICH HAVE ALREADY ESTABLISHED THAT IPTR IS AN ARRAY.         */
+/*   REFUSING THEM MEANT A COLLECTION THAT RAN WITH IBREAK SET GOT NO ARRAY  */
+/*   BOUNDS BACK AT ALL, LEFT GARB'S STATIC IND1/LEN AT THEIR STALE VALUES,  */
+/*   AND SO NEVER MARKED THE ARRAY'S CONTENTS -- WHICH WERE THEN SWEPT.      */
+    if (b_1.ibreak && *iactn <= 2) {
 	goto L9000;
     }
 /*                                      CHECK PARAMETER IPTR */
@@ -1197,8 +1240,12 @@ L4430:
 /*                                      EXITS */
 /* ARG NOT ARRAY */
 L8010:
+/*   G2: NOW THAT ACTIONS 3 AND 4 RUN WITH A BREAK PENDING, THIS EXIT MUST */
+/*   NOT REPLACE THE ERROR THAT IS ALREADY ON ITS WAY TO SYSERROR.         */
+    if (! b_1.ibreak) {
+	b_1.errtyp = 21;
+    }
     b_1.ibreak = TRUE_;
-    b_1.errtyp = 21;
     goto L9000;
 /* ARRAY INDEX OUT OF BOUNDS */
 L8020:
@@ -1264,6 +1311,11 @@ L9000:
     a_1.maxint = a_1.maxbig;
     a_1.iresol = 8;
     a_1.ipower = 50;
+/*   F2: FUZZ is the rounding nudge PRIFLO adds before its digit loop        */
+/*   truncates, and it has to be half a unit in the last digit PRIFLO prints */
+/*   -- IRESOL significant ones.  The value is right; what was wrong is that */
+/*   PRIFLO evaluated the nudge in REAL, where 5E-8 is below half an ulp of  */
+/*   1.0f and so vanished entirely.  See the note in PRIFLO.                 */
     a_1.fuzz = 5e-8f;
 /* THE NEAREST 10**N LOWER THAN MAXBIG */
 #ifdef FORTRAN_LIB
@@ -2679,51 +2731,67 @@ L9100:
 
     /* Local variables */
     static integer ipos0;
-    static real s;
+/*   F2: S is the mantissa normalised into [1,10) by repeated multiplication  */
+/*   or division by ten, and DR is the value the digit loop consumes.  Both   */
+/*   were REAL -- a 24-bit mantissa -- so reaching 1.0E-30 cost thirty        */
+/*   roundings and almost every float with a decimal exponent printed as a    */
+/*   decimal that names a *different* float: 1.0E-5 came out 9.999999E-6, and */
+/*   reading that back did not give the value that was printed.  A double     */
+/*   holds any float32 divided by any power of ten to far beyond the eight    */
+/*   significant digits IRESOL asks for, so the printed digits become the     */
+/*   correctly rounded ones and PRINT/READ -- and MAKEFILE/LOAD -- close.     */
+    static doublereal s, dr;
     static integer limit, ie;
     extern /* Subroutine */ int priint_(integer *);
     static integer num;
+/*   F2: IE0 is the decimal exponent as the normalisation loops found it,     */
+/*   kept because L44/L46 zero IE to choose F format and the rounding nudge   */
+/*   below still needs to know where the digits will fall.                    */
+    static integer ie0, knudge, ndig;
+    static doublereal dnudge;
 
 /* OMMON AND INTEGER DECLARATIONS */
 /* OMMON AND INTEGER DECLARATIONS END */
     ie = 0;
-    if (*r__ < 0.f) {
+    dr = (doublereal) (*r__);
+    if (dr < 0.) {
 	goto L2;
-    } else if (*r__ == 0) {
+    } else if (dr == 0.) {
 	goto L10;
     } else {
 	goto L3;
     }
 L2:
-    *r__ = -(*r__);
+    dr = -dr;
     b_1.prbuff[b_1.prtpos - 1] = chars_1.iminus;
     ++b_1.prtpos;
 /*                                      CHOOSE E OR F FORMAT */
 L3:
-    s = *r__;
-    if (*r__ >= 1.f) {
+    s = dr;
+    if (dr >= 1.) {
 	goto L45;
     }
 /*                                      R .LT. 1. */
 L41:
-    if (-ie >= a_1.ipower || s >= 1.f) {
+    if (-ie >= a_1.ipower || s >= 1.) {
 	goto L44;
     }
     --ie;
-    s *= 10.f;
+    s *= 10.;
     goto L41;
 L44:
+    ie0 = ie;
     if (-ie <= 3) {
 	ie = 0;
     }
     goto L50;
 /*                                      R .GE. 1. */
 L45:
-    if (ie >= a_1.ipower || s < 10.f) {
+    if (ie >= a_1.ipower || s < 10.) {
 	goto L46;
     }
     ++ie;
-    s /= 10.f;
+    s /= 10.;
     goto L45;
 L46:
 /* *** CHANGED BY TR */
@@ -2732,41 +2800,97 @@ L46:
 /*   below was written "IE = O" against a variable with no store anywhere in */
 /*   the program, which only meant zero because F2C makes locals static.     */
 /*   Both are written out plainly now: below 10**IRESOL, use F format.       */
+    ie0 = ie;
     if (ie < a_1.iresol) {
 	ie = 0;
     }
 /*                                      NORMALIZE */
 L50:
     if (ie != 0) {
-	*r__ = s;
+	dr = s;
     }
-    *r__ *= a_1.fuzz / s + 1.f;
-    num = *r__;
-    limit = b_1.prtpos + a_1.iresol + 1;
+/*   F2: FUZZ is 5E-8 = half a unit in the eighth significant digit, and the */
+/*   digit loop below truncates -- so this is what turns truncation into     */
+/*   round-to-nearest.  Two things were wrong with the original              */
+/*   "R = R * (FUZZ/S + 1.)".                                                */
+/*                                                                          */
+/*   One: evaluated in REAL it was exactly 1.0f for every S in [1,10),       */
+/*   because 5E-8 is below half an ulp of 1.0f.  The nudge had been dead     */
+/*   ever since REAL became a 32-bit float.                                  */
+/*                                                                          */
+/*   Two: a *relative* nudge is half a unit in the eighth SIGNIFICANT digit, */
+/*   which is right for E format -- eight significant digits are printed --  */
+/*   but not for F format, where LIMIT is a character budget and leading     */
+/*   zeros eat into it.  0.01 gets only six significant digits (".00999999"),*/
+/*   so it needs a nudge ten times larger than the relative form gives, and  */
+/*   printed .00999999 without it.  Size the nudge by the last place that is */
+/*   actually going to be printed:                                           */
+/*                                                                          */
+/*     E format          mantissa in [1,10), 1 + (NDIG-1) digits    -> FUZZ  */
+/*     F format, IE0>=0  IE0+1 integer digits, NDIG-IE0-1 after the point    */
+/*     F format, IE0<0   no integer digit, NDIG digits after the point       */
+    dnudge = (doublereal) a_1.fuzz;
+    if (ie == 0) {
+	knudge = ie0;
+	if (knudge < 0) {
+	    knudge = -1;
+	}
+	while (knudge > 0) {
+	    dnudge *= 10.;
+	    --knudge;
+	}
+	while (knudge < 0) {
+	    dnudge /= 10.;
+	    ++knudge;
+	}
+    }
+    dr += dnudge;
+/*                                      THE NUDGE CANNOT CARRY A FLOAT32     */
+/*                                      MANTISSA UP TO 10 (THE CLOSEST ONE   */
+/*                                      GETS IS ABOUT 9.9999994), BUT A      */
+/*                                      MANTISSA OF 10 WOULD PRINT AS        */
+/*                                      "10.E-6", SO SAY SO OUTRIGHT.        */
+    if (ie != 0 && dr >= 10.) {
+	dr /= 10.;
+	++ie;
+    }
+/*                                      NUM IS SET AT L52 BEFORE IT IS USED; */
+/*                                      ASSIGNING IT HERE WAS DEAD, AND WAS  */
+/*                                      UNDEFINED FOR A VALUE ABOVE MAXBIG.  */
+/*   F2: NDIG is how many significant digits get printed.  IRESOL is also    */
+/*   the F-versus-E threshold at L46, so it is named separately here.        */
+/*                                                                          */
+/*   Eight is not enough to identify a 32-bit float -- nine are needed for a */
+/*   guaranteed round trip -- and raising NDIG to nine does close the last   */
+/*   1.4% of PRINT/READ pairs.  It is deliberately NOT raised: the ninth     */
+/*   digit is where a float32's representation error lives, so .1 would      */
+/*   print as .100000001 and 3.1415927 as 3.14159274.  Eight digits,         */
+/*   correctly rounded, keeps everyday values readable and exact; what is    */
+/*   left over is bit patterns whose eight-digit decimal is genuinely        */
+/*   ambiguous.  Raise NDIG (and FUZZ, to 5E-9, which must stay half a unit  */
+/*   in the last printed digit) if exactness ever matters more.              */
+    ndig = a_1.iresol;
+    limit = b_1.prtpos + ndig + 1;
 /* OUTPUT NUMBER OF INTEGERS WHICH CAN BE HANDELED BY PRIINT */
 /* IF 10**IRESOL GT LARGEST INTEGER PRIINT MUST BE CALLED IN LOOP */
 L51:
-    if (*r__ < (real) a_1.maxbig) {
+    if (dr < (doublereal) a_1.maxbig) {
 	goto L52;
     }
 /*  With IRESOL <= LOG10(MAXBIG) the normalisation above always leaves R */
 /*  below MAXBIG, so only a value that is not finite can reach here -- and */
 /*  it would spin forever, since FMOD of an infinity is a NaN.  MKREAL now */
 /*  keeps those out of the system; stop here too rather than trust that. */
-    if (! (*r__ - *r__ == 0.f)) {
-	*r__ = 0.f;
+    if (! (dr - dr == 0.)) {
+	dr = 0.;
 	goto L52;
     }
-    num = (integer) (*r__ / a_1.rmax);
+    num = (integer) (dr / (doublereal) a_1.rmax);
     priint_(&num);
-#ifdef FORTRAN_LIB
-    *r__ = r_mod(r__, &a_1.rmax);
-#else
-    *r__ = fmod((double)*r__, (double)a_1.rmax);
-#endif
+    dr = fmod(dr, (doublereal) a_1.rmax);
     goto L51;
 L52:
-    num = *r__;
+    num = (integer) dr;
     if (num != 0) {
 	priint_(&num);
     }
@@ -2775,15 +2899,11 @@ L52:
     ++b_1.prtpos;
     ipos0 = b_1.prtpos;
 L6:
-#ifdef FORTRAN_LIB
-    *r__ = r_mod(r__, &c_b239) * 10.f;
-#else
-    *r__ = fmod((double)*r__, (double) c_b239) * 10.0;
-#endif
-    if (*r__ == 0.f || b_1.prtpos >= limit) {
+    dr = fmod(dr, 1.) * 10.;
+    if (dr == 0. || b_1.prtpos >= limit) {
 	goto L7;
     }
-    num = *r__;
+    num = (integer) dr;
     b_1.prbuff[b_1.prtpos - 1] = chars_1.ifig[num];
     ++b_1.prtpos;
     if (num > 0) {
@@ -3382,10 +3502,26 @@ L4500:
     }
 /*                                      REAL NUMBER */
     r__ = sum[0] + sum[1] / div2;
-    *x = a_1.numadd;
+/*   F3: the zero test used to run before IRFLAG -- the flag that records    */
+/*   whether the atom held a '.' or an 'E' -- was ever consulted, so every   */
+/*   float literal worth zero (0.0, -0.0, .0, 0E5) came back as the small    */
+/*   integer 0.  D12 made the printer write a float zero as "0."; without    */
+/*   this the reader turned it straight back into an integer, so PRINT/READ  */
+/*   -- and therefore MAKEFILE/LOAD -- changed the type of every float zero. */
+/*   IRFLAG is 1 for plain digits, 2 after a '.', 3 after an 'E'.            */
     if (r__ == 0.f) {
+	if (irflag == 1) {
+	    *x = a_1.numadd;
+	    goto L6000;
+	}
+	s1 = 0.f;
+	if (isign < 0) {
+	    s1 = -s1;
+	}
+	*x = mkreal_(&s1);
 	goto L6000;
     }
+    *x = a_1.numadd;
 /*   E16: SUM(3) accumulates the exponent digits as a DOUBLEREAL, so a      */
 /*   20-digit exponent gives 1e20.  Converting that to INTEGER is undefined */
 /*   behaviour, and negating the INT_MIN x86 in fact produces is undefined  */
@@ -3751,6 +3887,11 @@ L6:
     arrlst = -carcdr_1.cdr[s - 1];
 /* *SETC*      CALL SETCDR(S, -NIL) */
     carcdr_1.cdr[s - 1] = -b_1.nil;
+/*   G2: IND1/LEN ARE STATIC.  IF ARRUTL EVER DECLINES TO STORE, A STALE PAIR */
+/*   MUST NOT DRIVE THE LOOP BELOW -- ZERO MEANS "EMPTY", WHICH IS SAFE.  SAME */
+/*   PRECAUTION AS MOVE ALREADY TAKES.                                         */
+    ind1 = 0;
+    len = 0;
     arrutl_(&s, &c__3, &c__1, &ind1, &len);
     ind2 = ind1 + len;
 L7:
@@ -3958,8 +4099,12 @@ L4030:
     if (carcdr_1.car[n - 1] != b_1.array) {
 	goto L409;
     }
+/*   G2: SEE THE NOTE AT STEP 1.  A STALE INDS/LENS HERE WOULD REBUILD THE */
+/*   ARRAY FROM ANOTHER ARRAY'S SOURCE AND LENGTH.                          */
     for (ireg = 1; ireg <= 3 || ireg == 1; ++ireg) {
 /* L4031: */
+	inds[ireg - 1] = 0;
+	lens[ireg - 1] = 0;
 	arrutl_(&n, &c__3, &ireg, &inds[ireg - 1], &lens[ireg - 1]);
     }
     for (ireg = 1; ireg <= 3 || ireg == 1; ++ireg) {
@@ -4133,6 +4278,10 @@ L622:
     if (s != b_1.array || i__ > a_1.natom) {
 	goto L625;
     }
+/*   G2: SEE THE NOTE AT STEP 1.  THIS LOOP *WRITES* THROUGH IND1, SO A STALE */
+/*   PAIR HERE SPRAYS RELOCATED POINTERS OVER PNAME.                           */
+    ind1 = 0;
+    len = 0;
     arrutl_(&i__, &c__3, &c__1, &ind1, &len);
     iret = 5;
 L623:
@@ -4348,6 +4497,12 @@ L802:
 /* OMMON AND INTEGER DECLARATIONS */
 /* OMMON AND INTEGER DECLARATIONS END */
 /*             AT ENTRY IS POINTS TO AN UNMARKED LIST-CELL */
+/*   G1: ...AND GARB ONLY EVER CALLS IT WITH ONE, BUT SAY SO ANYWAY.  NIL AND */
+/*   T ARE SELF-REFERENTIAL (CAR(NIL) = CDR(NIL) = NIL), SO DESCENDING INTO   */
+/*   ONE IS WHAT SETS THE NEGATIVE SUBSCRIPT BELOW GOING.                     */
+    if (*is <= b_1.t || *is > a_1.nfreet) {
+	return 0;
+    }
     i__ = b_1.nil;
     s = *is;
 
@@ -4366,6 +4521,17 @@ L1:
 L11:
     if (icdr > a_1.nfreet) {
 	goto L1024;
+    }
+/*   G1: THE INLINE MARKER IN GARB (LABEL 30) OPENS WITH  IF (S.LE.T) GOTO 50, */
+/*   AND THIS ROUTINE HAD NO EQUIVALENT.  CDR(NIL) IS NIL, WHICH IS NEITHER    */
+/*   ABOVE NFREET NOR ALREADY MARKED, SO THE FORWARD SCAN WALKED INTO CELL 1,  */
+/*   WROTE CDR(NIL) = -I, AND ON THE NEXT TURN READ CDR(ICDR-1) WITH ICDR      */
+/*   NEGATIVE -- ROUGHLY ICDR*4 BYTES BELOW THE ALLOCATION.  ANY COLLECTION    */
+/*   OVER A STRUCTURE DEEPER THAN THE A-STACK CAME HERE, SO THIS ROUTINE HAD   */
+/*   NEVER ONCE RUN TO COMPLETION.  A LEAF IS MARKED IN S AND NOT ENTERED,     */
+/*   WHICH IS EXACTLY WHAT L1024 ALREADY DOES FOR A NUMBER.                    */
+    if (icdr <= b_1.t) {
+	goto L24;
     }
 /* L12: */
     if (carcdr_1.cdr[icdr - 1] < 0) {
@@ -4407,6 +4573,11 @@ L24:
 /* L25: */
     if (icar > a_1.nfreet) {
 	goto L1002;
+    }
+/*   G1: THE SAME LEAF TEST ON THE CAR SIDE.  L1002 IS THE "DO NOT DESCEND" */
+/*   EXIT THE NUMBER CASE ALREADY USES.                                     */
+    if (icar <= b_1.t) {
+	goto L2;
     }
 /* L26: */
     if (carcdr_1.cdr[icar - 1] < 0) {
@@ -5403,54 +5574,10 @@ L1:
     return 0;
 } /* rda1_ */
 
-integer mpname_(integer *x, integer1 *buffer, integer *max__, integer *ipl)
-{
-    /* System generated locals */
-    integer ret_val, i__1;
-
-    /* Local variables */
-    static integer main, i__;
-    extern integer getpn_(integer *, integer *, integer *, integer *);
-    static integer jb, ich;
-
-/* -- MOVES THE PNAME OF X TO THE BUFFER IN PACKED FORM */
-/* -- MPNAME LT 0  ERROR */
-/* --        EQ 0  OK */
-/* --        GT 0  TRUNCATION */
-/* OMMON AND INTEGER DECLARATIONS */
-/* OMMON AND INTEGER DECLARATIONS END */
-    /* Parameter adjustments */
-    --buffer;
-
-    /* Function Body */
-    if (getpn_(x, &main, &jb, ipl) < 0) {
-	goto L5;
-    }
-    i__1 = *max__;
-    for (i__ = 1; i__ <= i__1 || i__ == 1; ++i__) {
-/* 2     CALL PUTCH(BUFFER,1H ,I) */
-/* L2: */
-	putch_(&buffer[1], &chars_1.space, &i__);
-    }
-    ret_val = 0;
-    if (*ipl <= *max__) {
-	goto L3;
-    }
-    ret_val = 1;
-    *ipl = *max__;
-L3:
-    i__1 = *ipl;
-    for (i__ = 1; i__ <= i__1 || i__ == 1; ++i__) {
-	getch_(b_1.pname, &ich, &jb);
-	putch_(&buffer[1], &ich, &i__);
-/* L4: */
-	++jb;
-    }
-    return ret_val;
-L5:
-    ret_val = -1;
-    return ret_val;
-} /* mpname_ */
+/*   G7: MPNAME -- "MOVES THE PNAME OF X TO THE BUFFER IN PACKED FORM" --
+     stood here with no caller in either translation unit.  Removed rather
+     than left to drift out of step with GETPN, which is the one decoder
+     every string operation goes through.  */
 
 /* Subroutine */ int wra4_(integer *lun, integer *line, integer *i1, integer *
 	i2)
@@ -5709,6 +5836,14 @@ L1000:
     if (a1 < 1 || a1 > b_1.maxlun) {
 	goto L10000;
     }
+/*   F10: ... AND MUST NOT BE ONE OF THE RESERVED ONES.  OPENF ALREADY SKIPS  */
+/*   4 (SYSATOMS), 5 AND 6 (THE TERMINAL) WHEN IT PICKS A FREE UNIT; XCALL    */
+/*   DID NOT, SO (XCALL 1 '(5 "F" NEW FORMATTED)) REPOINTED STANDARD INPUT AT */
+/*   AN OUTPUT FILE.  NOTHING IN THE LISP LAYER OR THE BUILD USES A UNIT      */
+/*   BELOW 10.                                                               */
+    if (a1 == b_1.lunsys || a1 == b_1.lunins || a1 == b_1.lunuts) {
+	goto L10000;
+    }
     *x = carcdr_1.cdr[*x - 1];
     if (*x <= a_1.natom || *x > a_1.nfreet) {
 	goto L10000;
@@ -5784,6 +5919,11 @@ L2000:
     a1 = getnum_(x);
 /*                                      LOGICAL UNIT MUST BE IN RANGE. */
     if (a1 < 1 || a1 > b_1.maxlun) {
+	goto L10000;
+    }
+/*   F10: (XCALL 2 6) CLOSED STANDARD OUTPUT -- EVERYTHING AFTER IT VANISHED */
+/*   AND THE INTERPRETER STILL EXITED 0.  (XCALL 2 5) CLOSED STANDARD INPUT. */
+    if (a1 == b_1.lunsys || a1 == b_1.lunins || a1 == b_1.lunuts) {
 	goto L10000;
     }
 #ifdef FORTRAN_LIB
@@ -5908,7 +6048,7 @@ static void usage(char *cmd) {
 	fprintf(stderr, "\tWhere Z is one of:\n\n");
 	fprintf(stderr, "\tc = car/cdr cells (default %d)\n", CELLS);
 	fprintf(stderr, "\ta = atoms (default %d)\n", ATOMS);
-	fprintf(stderr, "\ts = stack space (default %d)\n", STACK);
+	fprintf(stderr, "\ts = stack space (default %d, minimum 500)\n", STACK);
 	fprintf(stderr, "\tp = print names / strings / reals / arrays (default %d)\n\n", ARRAY);
 
 	fprintf(stderr, "\tN = a number (no space between the option and N)\n\n");

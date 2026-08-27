@@ -38,7 +38,7 @@ Memory defaults are compile-time (`PARMS` in the Makefiles): `CELLS=100000` (con
 ./lispf4 -c200000 -a5000 basic.img    # override cells/atoms/stack/pnames at runtime
 ```
 
-Flags: `-c` cells, `-a` atoms, `-s` stack, `-p` print names, `-x` no image, `-h` usage. The number may be attached (`-c200000`) or separated (`-c 200000`). Options must precede the image file name; a trailing option, an unknown option, and `-x` together with an image file are all errors with a non-zero exit.
+Flags: `-c` cells, `-a` atoms, `-s` stack, `-p` print names, `-x` no image, `-h` usage. The number may be attached (`-c200000`) or separated (`-c 200000`). Options must precede the image file name; a trailing option, an unknown option, and `-x` together with an image file are all errors with a non-zero exit. `main()` also rejects a degenerate configuration — note that `-s` has a floor of **500**, because the interpreter reserves a fixed 150-slot margin at the top of the parameter stack and tests it on every `EVAL`; below that it reports overflow on programs that fit, and at 150 or less it never gets started at all.
 
 `make test` runs the regression suite in `tests/` — see `tests/README.md` for the case
 format and for what each case detects. `make testdebug` runs it against the ASan/UBSan

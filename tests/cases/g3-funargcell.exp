@@ -1,0 +1,8 @@
+99
+MKF
+(FUNARG (LAMBDA (X) (LIST X A)) ((A . 7)))
+(3 7)
+(3 7)
+(FUNARG (LAMBDA (X) X) NIL)
+3
+(3 5)

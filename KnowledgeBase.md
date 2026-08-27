@@ -140,6 +140,92 @@ See `Bugs2.md`, findings E1-E19. The themes worth carrying forward:
   now folds CRLF, and `INIT2` refuses a short file rather than reading the rest of the
   atom table off standard input (E15). A `.gitattributes` keeps the checkout LF.
 
+### Fourth bug-fix pass (2026-08-27)
+
+See `Bugs3.md` (F1-F12) and `Bugs4.md` (G1-G7), which were fixed together. The themes
+worth carrying forward:
+
+- **Size and depth are an input dimension of their own.** Every earlier pass varied the
+  *shape* of arguments -- dotted, malformed, wrong type -- and none varied their size. A
+  list nested deeper than the A-stack is the first input that makes `GARB` take its
+  fallback marking path, and `MARKL`, that fallback, had never once run to completion:
+  it had no NIL guard, so it walked into cell 1, wrote `CDR(NIL) = -I`, and then indexed
+  `CAR`/`CDR` with that negative value. Any collection over a structure of ~1500 cells
+  crashed, `SYSOUT` included (G1). `MARKL` now applies the same `s <= T` leaf test the
+  inline marker at `GARB`'s label 30 has always had, on both the CAR and the CDR side.
+  This one was inherited from the FORTRAN (`Lispf42.f:2153`, `2178`), not introduced by
+  the conversion.
+- **A collection can run with `IBREAK` already set.** The error entry `L2400` allocates
+  four cells *before* it clears `IBREAK`, and `ARRUTL` refused to store anything while a
+  break was pending -- so a collection triggered from there got no array bounds back,
+  left `GARB`'s `static` `IND1`/`LEN` at their stale values, and never marked the array's
+  contents, which were then swept while the array still pointed at them (G2). `ARRUTL`
+  now refuses only actions 1 and 2 (the ones that read and write an element on Lisp's
+  behalf); actions 3 and 4 are bookkeeping and their only callers are `GARB` and `MOVE`,
+  which have already established that the argument is an array. `GARB` also zeroes
+  `IND1`/`LEN`/`INDS`/`LENS` before each call, the way `MOVE` already did. Anything else
+  that keeps state in a `static` across an `ARRUTL` call needs the same care. Note which
+  errors leave `IBREAK` set: an array subscript (21, 28), a keyboard interrupt (26), the
+  user break character (27), the space warnings in `MATOM`/`MKREAL` (21, 25, 33, 37),
+  `GARB0` (34) and the printer's bad-substring path (29). An ordinary type error does
+  not, which is why `(CAR 5)` never reproduced it and `(ELT A 99999)` did.
+- **A substring's descriptor is ordinary cons cells, and `(CDR s)` hands them to Lisp.**
+  `RPLACA`/`RPLACD` refuse the substring *atom* but not its descriptor, so any program
+  could choose the byte offset and length that `GETPN` -- the single decoder every string
+  operation goes through -- hands out. That was an out-of-bounds read through nine
+  builtins and an out-of-bounds *write* through `RPLSTRING` (F1). `GETPN` now requires
+  the offset and length to be genuine small integers (the old test was `> NFREET`, which
+  a float passes) and bounds the window by `PNP(MAIN+1) - PNP(MAIN)`, the length of the
+  string it is a window onto.
+- **32-bit `real` where more than 24 bits of mantissa are needed, again.** E11 fixed the
+  ordering predicates; the same mistake was still in three more places. `PRIFLO`
+  normalised the mantissa by repeated single-precision multiply or divide by ten -- thirty
+  roundings to reach `1.0E-30` -- so almost every float with a decimal exponent printed as
+  a decimal naming a *different* float (F2); the value-producing arithmetic converted each
+  integer operand with `(real)` before combining, and `PLUS`/`TIMES` accumulated in `real`
+  too (F4). Both now work in `doublereal` and narrow once at the end. When touching this
+  code, sweep every `(real)` cast and every `10.f`.
+- **`GTREAL` returning 0.0 does not mean "integer".** It is the marker for "not a float",
+  and a float *zero* returns 0.0 as well, so `(PLUS 0.0 1)` came back as the integer 1.
+  The type test is `v > BIGNUM` (small integer) versus `NFREET < v <= BIGNUM` (float);
+  that is what the arithmetic uses now. The comparison predicates were left on the old
+  test on purpose -- a float zero's integer view is exactly 0, so they still order
+  correctly.
+- **A `FUNARG` is only unwrapped when it is `CAR` of the form.** `L1776` handles
+  `((FUNARG f alist) ...)`; a block reached through an atom's function cell went to
+  `L1786`/`L1788` instead, where `CDDR` of the funarg block -- the closure's a-list --
+  became the body (G3). `L1788` now hands such a value back to the unwrapping loop, which
+  is bounded so a self-referential block cannot spin it. `FUNCTION` with an explicitly
+  empty variable list also built the two-element `(FUNARG f)`, which nothing can apply;
+  it now builds `(FUNARG f NIL)` (G5).
+- **A configuration the validator accepts must be one the interpreter can run in.**
+  `-s` was allowed down to 100, and `LISPF4` reserves a fixed 150-slot margin
+  (`HILLW = HILL - 150`) tested on every `EVAL` -- so at 150 or less an empty parameter
+  stack read as full, the overflow handler escalated to "fatal", reset to `L1`, and `L1`
+  put `HILLW` back: an infinite stream of "Parameter stack owerflow" that never read
+  standard input and never exited (G4). The minimum is now 500, `HILLW` is clamped
+  positive as a backstop, and `usage()` says so. `-c`/`-a`/`-p` did not need this because
+  `ROLLIN` rejects a configuration too small for the image; the stack is not in the image.
+- **Reserved logical units.** `OPENF` has always skipped 4 (`SYSATOMS`), 5 and 6 (the
+  terminal) when picking a free unit; `XCALL`, `ROLLIN` and `ROLLOUT` did not, so
+  `(XCALL 2 6)` closed standard output and still exited 0, and `(ROLLOUT 6)` sprayed a
+  binary image at the terminal (F10, G6). All three now refuse them, and `ROLLIN`/`ROLLOUT`
+  additionally require the unit to be open -- `ROLLOUT` ignores every write error, so a
+  closed unit used to run a full compacting collection and then report success.
+- **The `.lisp` layer's calling conventions have to agree with each other.** `ADVISE` was
+  the only LAMBDA in a family of NLAMBDAs, so `(ADVISE FOO ...)` failed while
+  `(UNADVISE FOO)` worked (F8). It is now an NLAMBDA wrapper over a LAMBDA worker
+  `ADVISE1`, the pattern `BREAK`/`BREAK0` already used; `TRACE` calls `ADVISE1`. Fixing
+  that also fixed `READVISE`, which called `(APPLY 'ADVISED ...)` -- a property name, not
+  a function -- and so had never worked. The other `.lisp` defects: `EDITP` called
+  `EDITS-INT` with two arguments where it takes three, which ignored its commands and
+  installed the command list as the atom's property list (F5); `BOUNDP` was an NLAMBDA
+  that looked only at the global value cell, so `(BOUNDP 'X)` was always NIL and a
+  `PROG`/`LAMBDA` binding reported unbound (F6); `ERRORN` read `ERRTYPE`, which is a
+  parameter of `SYSERROR` and therefore gone by the time `ERRORSET` returns, so the number
+  is now recorded in the global `LASTERRORN` with `SETTOPVAL` (F7); and `ADDINNAME` tested
+  a free `FN` instead of its own parameter `F` (F9).
+
 ---
 
 ## File Structure
@@ -237,7 +323,7 @@ lispf4 [-c N] [-a N] [-s N] [-p N] [-x] [FILE.IMG]
 
 -c N   CAR/CDR cells (default 100000)
 -a N   Atoms (default 3000)
--s N   Stack space (default 1500)
+-s N   Stack space (default 1500, minimum 500)
 -p N   Print names/strings/reals/arrays (default 5000)
 -x     No image file (reads SYSATOMS for system generation)
 ```
@@ -248,6 +334,15 @@ Options must come **before** the image file name; a trailing one used to be drop
 silence and is now an error. An unrecognised option exits non-zero (`-h`, `-?` and
 `--help` are the successful requests for the usage text), and `-x` together with an image
 file is refused rather than ignored.
+
+`main()` rejects a degenerate configuration before allocating: `-a` below 100, `-s` below
+500, `-p` at or below `-a`+100, `-c` at or below `-a`+1000, or a `-c`+`-a` beyond 1e9.
+The `-s` floor is 500 because `LISPF4` reserves a fixed 150-slot margin below the top of
+the parameter stack and tests it on every `EVAL`: below about 300 that produces spurious
+overflows, and at 150 or less it is an infinite error loop (G4).  `-c`/`-a`/`-p` are
+additionally checked against the image by `ROLLIN`, which reports
+"does not fit the current memory configuration" and exits 1; the stack is not part of an
+image, so nothing but this floor guards it.
 
 Reloading an image under different `-c`/`-a`/`-s`/`-p` works: `move_()` relocates every
 stored value, floats and array pointer slots included (see ROLLIN/ROLLOUT below). The one
@@ -462,6 +557,31 @@ Regression tests: `tests/cases/unpack-gc.sh` (direct) and
 `tests/cases/prolog2-gc.sh` (via `PVARP`, which classifies terms with
 `NTHCHAR`).
 
+**Marking is depth-bounded, and the fallback matters.** STEP 1 marks
+recursively using the A-stack between `IP` and `JP`; when that runs out
+(`b_1.ip >= b_1.jp - 1`) it hands the rest to `markl_()`, the non-recursive
+Schorr-Waite router, and prints `--- Non-recursive GBC called` the first time
+per collection. With the default `-s 1500` a structure of roughly 1500 cells
+crosses that line. `markl_()` must apply the same leaf test the inline marker
+opens with — `if (s <= b_1.t) goto L50` — on both the CAR and the CDR it is
+about to descend into. It did not, so it walked into `NIL` (whose CAR and CDR
+are both `NIL`), wrote `CDR(NIL) = -I`, and on the next turn indexed
+`carcdr_1.cdr[]` with that negative value: a SIGSEGV on every collection over a
+deep structure, `SYSOUT` included. `tests/cases/g1-deepgc.sh` checks both that
+the session survives and that `markl_()` was actually reached.
+
+**`garb_()` must not be run out of `ARRUTL`.** An array's pointer part lives in
+`PNAME`, so STEP 1, STEP 4 and STEP 6 all have to ask `arrutl_()` where it is.
+`arrutl_()` refuses to store anything while `IBREAK` is set — and `IBREAK` *is*
+set across the four `cons_()` calls in the error entry `L2400`, which clears it
+only afterwards. `garb_()` keeps `ind1`/`len`/`inds`/`lens` in `static` locals,
+so a refused query left stale values behind and the array's contents went
+unmarked (and, in STEP 6, relocated pointers were written through a stale
+index). `arrutl_()` now refuses only actions 1 and 2, which act on Lisp's
+behalf; actions 3 and 4 are bookkeeping and always answer. `garb_()` zeroes the
+indices before each call as a backstop, the way `move_()` already did. See
+`tests/cases/g2-arraybreak.lsp`.
+
 ---
 
 ## InterLisp Features
@@ -562,26 +682,30 @@ fail. `tests/cases/prolog2-gc.sh` runs one query 301 times under collection pres
 
 | Function | File:Line | Description |
 |----------|-----------|-------------|
-| `main()` | lispf42.c:188 | Entry point, command-line parsing, memory allocation, startup |
-| `init1_()` | lispf42.c:1224 | Machine-dependent initialization (JBYTES, MAXBIG, NUMADD, etc.) |
-| `init2_()` | lispf42.c:1312 | Reads SYSATOMS, initializes atoms/hash table/free lists |
+| `main()` | lispf42.c:188 | Entry point, command-line parsing, memory allocation, startup. Rejects a degenerate configuration -- note the `-s` floor of 500 (G4) |
+| `init1_()` | lispf42.c:1269 | Machine-dependent initialization (JBYTES, MAXBIG, NUMADD, FUZZ, etc.) |
+| `init2_()` | lispf42.c:1362 | Reads SYSATOMS, initializes atoms/hash table/free lists |
 | `lispf4_()` | lispf41.c | Main eval/apply loop |
-| `rollin_()` | lispf42.c:1556 | Load binary image file |
-| `rollou_()` | lispf42.c:1753 | Save binary image file |
-| `move_()` | lispf42.c:1860 | Relocate stored values on ROLLIN: CAR/CDR, the ARGS block, **and the pointer part of every array** (mirrors `garb_` STEP 6). One pass; `reloc_` (lispf42.c:1830) classifies each value into cells / floats / small integers first, so nothing is relocated twice |
-| `equal_()` | lispf42.c:704 | Structural equality. No cycle detection: it tests `apush2_`'s overflow marker and polls the break flag, so a circular comparison is bounded or killable rather than an unrecoverable hang |
-| `get_()` | lispf42.c:797 | Property lookup. Answers NIL for a malformed property list -- `RPLACD` on an atom can produce one, and EAPPLY's two hand-inlined copies fall back here |
-| `prinat_()` | lispf42.c:2459 | Print one atom, plus the leading `'` for each nested `(QUOTE x)`. Every write into `PRBUFF` here is bounded by `MARG` |
-| `garb_()` | lispf42.c:3590 | Garbage collector (mark-and-sweep with compaction) |
-| `shift_()` | lispf42.c:3454 | Character input reader / tokenizer (contains EOF handling at L1300) |
-| `lspex_()` | lispf42.c:4925 | Clean exit routine (prints GC stats, calls `exit(0)`) |
-| `mess_()` | lispf42.c:4971 | Print system message by number (messages defined in SYSATOMS) |
-| `rda1_()` | lispf42.c:5284 | Low-level line reader; sets `ieof=2` on end-of-file |
-| `matom_()` | lispf42.c:4526 | Atom creation. `k > 0` interns a literal atom from the `k` bytes in `ABUFF`; `k <= 0` makes an unhashed string of length `-k`. **`ABUFF` is 160 bytes, so that is the hard ceiling on a literal atom.** |
-| `priflo_()` | lispf42.c:2675 | Print a float. L51 assumes a finite value; `mkreal_` guarantees one |
-| `openf_()` | lispf42.c:5559 | `OPEN0`: open a file on the first free logical unit >= 10 |
-| `getcht_()` | lispf42.c:4832 | Query character type table |
-| `setcht_()` | lispf42.c:4853 | Set character type table entry |
+| `rollin_()` | lispf42.c:1606 | Load binary image file |
+| `rollou_()` | lispf42.c:1803 | Save binary image file. Ignores write errors, so its callers must check the unit is open first |
+| `move_()` | lispf42.c:1910 | Relocate stored values on ROLLIN: CAR/CDR, the ARGS block, **and the pointer part of every array** (mirrors `garb_` STEP 6). One pass; `reloc_` (lispf42.c:1880) classifies each value into cells / floats / small integers first, so nothing is relocated twice |
+| `equal_()` | lispf42.c:715 | Structural equality. No cycle detection: it tests `apush2_`'s overflow marker and polls the break flag, so a circular comparison is bounded or killable rather than an unrecoverable hang. A float and an integer of the same value are **not** equal -- except at zero, where `gtreal_` answers 0.0 for both |
+| `get_()` | lispf42.c:808 | Property lookup. Answers NIL for a malformed property list -- `RPLACD` on an atom can produce one, and EAPPLY's two hand-inlined copies fall back here |
+| `getpn_()` | lispf42.c:852 | **The single decoder for every string operation**: returns the byte offset and length of a litatom/string/substring. A substring's descriptor is three ordinary cons cells that `(CDR s)` hands to Lisp, so this is where the offset and length are validated -- genuine small integers, and inside the string they are a window onto (F1). Answers -1 for anything else |
+| `arrutl_()` | lispf42.c:1010 | Array bookkeeping. Actions 1 and 2 (get/set an element) refuse to act while `IBREAK` is set; actions 3 and 4 (bounds, make) must not, because `garb_` and `move_` call them and a refusal leaves their indices stale (G2) |
+| `prinat_()` | lispf42.c:2509 | Print one atom, plus the leading `'` for each nested `(QUOTE x)`. Every write into `PRBUFF` here is bounded by `MARG` |
+| `priflo_()` | lispf42.c:2725 | Print a float. Normalises and extracts digits in `doublereal`; `FUZZ` turns the truncating digit loop into round-to-nearest and must stay half a unit in the last *printed* place, which is `NDIG` significant digits in E format but fewer in F format when leading zeros eat the budget. L51 assumes a finite value; `mkreal_` guarantees one |
+| `ratom_()` | lispf42.c:3233 | Token reader. A literal worth zero is an integer only when it held no `.` and no `E` (F3) |
+| `garb_()` | lispf42.c:3724 | Garbage collector (mark-and-sweep with compaction) |
+| `markl_()` | lispf42.c:4487 | Non-recursive (Schorr-Waite) marker, used when STEP 1 exhausts the A-stack. Needs the same `s <= T` leaf test the inline marker has, on both CAR and CDR (G1) |
+| `shift_()` | lispf42.c:3588 | Character input reader / tokenizer (contains EOF handling at L1300) |
+| `lspex_()` | lispf42.c:5094 | Clean exit routine (prints GC stats, calls `exit(0)`) |
+| `mess_()` | lispf42.c:5140 | Print system message by number (messages defined in SYSATOMS). Clamps the number, so a Lisp-supplied one cannot index outside `IMESS` |
+| `rda1_()` | lispf42.c:5453 | Low-level line reader; sets `ieof=2` on end-of-file |
+| `matom_()` | lispf42.c:4695 | Atom creation. `k > 0` interns a literal atom from the `k` bytes in `ABUFF`; `k <= 0` makes an unhashed string of length `-k`. **`ABUFF` is 160 bytes, so that is the hard ceiling on a literal atom.** |
+| `openf_()` | lispf42.c:5684 | `OPEN0`: open a file on the first free logical unit >= 10, skipping the reserved 4/5/6 |
+| `getcht_()` | lispf42.c:5001 | Query character type table |
+| `setcht_()` | lispf42.c:5022 | Set character type table entry |
 | `getch_()` | auxillary.c | Read byte -> blank-padded character in an integer |
 | `putch_()` | auxillary.c | Store a character's low byte into a byte array |
 | `f4_fp()` | auxillary.c | Validated lookup of a logical unit's `FILE*` (NULL if bad/closed) |

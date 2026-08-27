@@ -38,7 +38,7 @@ Scratch output lands in `tests/.work/` (gitignored) — `NAME.out` is the raw se
 ## Expected result today
 
 ```
-passed: 55   failed: 0   known failures: 0   unexpected passes: 0
+passed: 72   failed: 0   known failures: 0   unexpected passes: 0
 ```
 
 Everything found so far is fixed, so there are no `.bug` markers left. The driver exits 0
@@ -106,6 +106,20 @@ Because of this, avoid writing cases whose output includes an atom index (an arr
 - `rollin-reject` checks both image-load failure modes: a cleanly rejected image leaves the
   system usable (`ROLLIN` returns NIL and the session continues), while a truncated one stops
   the interpreter rather than running on a partly overwritten heap.
+- The `f`- and `g`-series cover `Bugs3.md` (F1-F12) and `Bugs4.md` (G1-G7).  Every one of
+  the seventeen was verified to fail against `Linux/lispf4` + `Linux/basic.img` -- the last
+  shipped build -- and to pass after the fix.  Point `LISPF4`/`LISPF4_IMG` at that pair to
+  re-check:  `LISPF4=./Linux/lispf4 LISPF4_IMG=./Linux/basic.img ./tests/run-tests.sh f1- g1-`.
+  Note that F5-F9 are `.lisp`-layer defects, so they need the *old image* as well as the old
+  interpreter; running them against a freshly built `basic.img` would pass trivially.
+- `g1-deepgc` asserts that `--- Non-recursive GBC called` appears in the transcript as well
+  as that the session survives.  That message is `MARKL` announcing itself, and `MARKL` is
+  the routine the case exists to exercise; without the check, raising the default `-s` would
+  quietly turn the case into a no-op.
+- `g2-arraybreak` needs the *error* to be one that leaves `IBREAK` set -- an array subscript
+  does, an ordinary type error like `(CAR 5)` does not -- and needs enough iterations for a
+  collection to land inside the four `CONS` calls of the error entry.  40 000 is comfortably
+  more than enough at the default `-c`.
 - `b9-bigger` and `sanity-image` are guards, not bug reproductions: raising `-c` above the
   image's build-time value must keep working, and the `SYSOUT`/`SYSIN` round-trip must
   survive the Phase 2 layout work.

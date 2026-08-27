@@ -1,0 +1,37 @@
+"BCD"
+"234"
+(2 . 999999)
+--- Bad substring. NIL printed
+NILPRIN0 - (TERPRI)
+(PRIN0 BROKEN)
+--- Illegal argument (subr2)
+--- Bad substring. NIL printed
+NCHARS - NILPRIN0 - (SPACES 1)
+(PRIN0 BROKEN)
+--- Bad substring. NIL printed
+PRINT - (PRIN0 X T)
+(PRINT BROKEN)
+--- Bad substring. NIL printed
+PRINT - (PRIN0 X T)
+(PRINT BROKEN)
+--- Bad substring. NIL printed
+PRINT - (PRIN0 X T)
+(PRINT BROKEN)
+--- Bad substring. NIL printed
+UNPACK - (AND (LESSP N 0) (SETQ N (PLUS (LENGTH L) N 1)))
+(UNPACK BROKEN)
+--- Bad substring. NIL printed
+PRINT - (PRIN0 X T)
+(PRINT BROKEN)
+(2000000 . 999999)
+(2000000 . 400)
+(2 . 400)
+--- Illegal argument (subr3)
+--- Bad substring. NIL printed
+RPLSTRING - NILPRIN0 - (SPACES 1)
+(PRIN0 BROKEN)
+(-100 . 400)
+--- Bad substring. NIL printed
+NILPRIN0 - (TERPRI)
+(PRIN0 BROKEN)
+"BCD"

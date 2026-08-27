@@ -56,10 +56,12 @@
           (RPLACA Y X)))
   
 (BOUNDP
-  [NLAMBDA (A)
-           (OR (NULL (NULL (STRINGP A)))
-               (NULL (NULL (NUMBERP A)))
-               (AND (LITATOM A) (NEQ (CAR A) 'NOBIND])
+  [LAMBDA (BOUNDPX)
+          (OR (NULL (NULL (STRINGP BOUNDPX)))
+              (NULL (NULL (NUMBERP BOUNDPX)))
+              (AND (LITATOM BOUNDPX)
+                   (OR (NULL (NULL (ASSOC BOUNDPX (ALIST))))
+                       (NEQ (CAR BOUNDPX) 'NOBIND])
   
 (CHANGEPROP
   [LAMBDA (A P PR)

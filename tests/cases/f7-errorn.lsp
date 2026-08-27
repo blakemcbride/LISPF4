@@ -1,0 +1,5 @@
+(NLSETQ (CAR 5))
+(ERRORN)
+(NLSETQ (CDR 7))
+(ERRORN)
+(EXIT)

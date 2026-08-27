@@ -17,7 +17,7 @@
                  (AND (LISTP X)
                       (OR (EQ (CAR X) 'REDO) (EQ (CAR X) 'HFIX))
                       (RETURN (EVAL X)))
-                 (AND (BOUNDP *HIST)
+                 (AND (BOUNDP '*HIST)
                       *HIST
                       [OR (NLISTP X)
                           (AND (NEQ '?? (CAR X))

@@ -5,7 +5,7 @@
 (ADDINNAME
   [LAMBDA (F)
           (COND ((NLISTP F) F)
-                ((EQ (CADR FN) 'IN)
+                ((EQ (CADR F) 'IN)
                   (PROG (NEW (FN (CAR F)) (IFN (CADDR F)) ND)
                         (OR (GETD FN) (RETURN))
                         (SETQ NEW (INNAME FN IFN))
@@ -22,6 +22,9 @@
                         (RETURN NEW])
   
 (ADVISE
+  (NLAMBDA (FN . L) (APPLY 'ADVISE1 (CONS FN L))))
+
+(ADVISE1
   (LAMBDA (FN . L)
           (PROG (WHEN WHAT
                       (BR (UNBREAK1 FN))
@@ -134,7 +137,7 @@
                                             (CDR OLD)
                                             '(LAMBDA
                                                (ADV)
-                                               (APPLY 'ADVISED
+                                               (APPLY 'ADVISE1
                                                  (CONS FN ADV]
                                           (RETURN FN))
                                         (T (RETURN NIL])
@@ -182,15 +185,15 @@
                    '(LAMBDA (FN IFN)
                             (SETQ IFN (THEINNAME FN))
                             (COND ((GETPROP IFN 'TRACED) NIL)
-                                  (T (OR (ADVISE FN
+                                  (T (OR (ADVISE1 FN
                                            (LIST 'TRACE-PRINT
                                              (KWOTE IFN)
                                              T))
                                          (RETURN))
                                      (PUTPROP IFN 'TRACED T)
-                                     (ADVISE FN 'BIND
+                                     (ADVISE1 FN 'BIND
                                        '(*TRACEN (ADD1 *TRACEN)))
-                                     (ADVISE FN 'AFTER
+                                     (ADVISE1 FN 'AFTER
                                        (LIST 'TRACE-PRINT (KWOTE IFN])
   
 (TRACE-PRINT
@@ -253,7 +256,7 @@
 )
 (PRINT 'DEBUG2FNS)
 (RPAQQ DEBUG2FNS
-       (ADDINNAME ADVISE ADVISE-BODY BREAK BREAK-BODY BREAK0 INNAME LAMBDAEQV 
+       (ADDINNAME ADVISE ADVISE1 ADVISE-BODY BREAK BREAK-BODY BREAK0 INNAME LAMBDAEQV 
          PUTD READVISE REBREAK REBREAK1 REMINNAME THEINNAME TRACE TRACE-PRINT 
          UNADVISE UNADVISE1 UNBREAK UNBREAK1 UNTRACE))
 (RPAQQ DEBUG2COMS (DEBUG PACKAGE 2))
