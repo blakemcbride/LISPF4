@@ -17,10 +17,15 @@ PARMS = -DCELLS=100000 -DATOMS=3000 -DSTACK=1500 -DARRAY=5000
 CFLAGS = -nologo -O2 $(PARMS) -DYEAR=$(LAST_UPDATE_YEAR) -DMONTH=$(LAST_UPDATE_MONTH) -DDAY=$(LAST_UPDATE_DAY)
 FFLAGS =  -onetrip -A -h
 
-.f.c .PRECIOUS:
-	$(F2C) -onetrip -A -h -E $<
+# NEVER regenerate the C from the FORTRAN -- see the note in Makefile and in
+# CLAUDE.md.  The rule that used to stand here referred to an undefined $(F2C),
+# and NMAKE finds "lispf41.f" as Lispf41.f on a case-insensitive filesystem.
 
-basic.img : bare.img script.2
+# basic.img is built by loading these into bare.img -- see script.2.
+LISPSRC = basic1.lisp basic2.lisp io1.lisp func1.lisp debug1.lisp \
+          debug2.lisp edit.lisp makef.lisp history.lisp
+
+basic.img : bare.img script.2 $(LISPSRC)
 	lispf4 bare.img <script.2
 
 bare.img : lispf4.exe SYSATOMS script.1

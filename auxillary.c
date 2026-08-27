@@ -65,14 +65,22 @@ void	setup()
 	Logical_units[6] = stdout;
 }
 
+/*  Open the new stream BEFORE closing the old one.  Closing first meant a
+    failed reopen silently closed the file the unit already had, leaving the
+    caller with a unit that reports "not open" and no way back.  */
+
 int	f4_open(int lun, char *file, char *mode)
 {
+	FILE	*fp;
+
 	if (lun < 0  ||  lun >= F4_MAXLUN)
+		return 1;
+	if ((fp = fopen(file, mode)) == NULL)
 		return 1;
 	if (Logical_units[lun])
 		fclose(Logical_units[lun]);
-	Logical_units[lun] = fopen(file, mode);
-	return Logical_units[lun] ? 0 : 1;
+	Logical_units[lun] = fp;
+	return 0;
 }
 
 int	f4_close(int lun)

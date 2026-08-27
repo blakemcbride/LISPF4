@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-LISPF4 is an InterLisp interpreter written by Mats Nordstrom (Uppsala, 1980-83) in FORTRAN IV, converted to C by Blake McBride via F2C and then hand-modified. It is a dynamically scoped Lisp with LAMBDA/NLAMBDA/FUNARG, a structure editor, property lists, arrays, and binary image save/load. No GUI, no test suite.
+LISPF4 is an InterLisp interpreter written by Mats Nordstrom (Uppsala, 1980-83) in FORTRAN IV, converted to C by Blake McBride via F2C and then hand-modified. It is a dynamically scoped Lisp with LAMBDA/NLAMBDA/FUNARG, a structure editor, property lists, arrays, and binary image save/load. No GUI. The regression suite lives in `tests/`; run it with `make test`.
 
 **`KnowledgeBase.md` in the repo root is the deep technical reference** — memory layout, atom representation, eval/apply labels, GC, ROLLIN/ROLLOUT format, COMMON block contents, and a function-to-file:line index. Read it before doing anything nontrivial in the C code. Keep it current when you change interpreter internals.
 
@@ -24,11 +24,9 @@ The build is a three-stage bootstrap, and each stage depends on the previous:
 2. `./lispf4 -x <script.1` reads `SYSATOMS`, does a ROLLOUT → `bare.img`
 3. `./lispf4 bare.img <script.2` loads the `.lisp` packages, does a SYSOUT → `basic.img`
 
-**Gotcha:** `basic.img` depends only on `bare.img` and `script.2` in the Makefile — *not* on the `.lisp` files. After editing any `.lisp` file you must force the rebuild:
-
-```bash
-rm -f basic.img && make
-```
+`basic.img` depends on `bare.img`, `script.2` and every `.lisp` file `script.2` loads
+(`LISPSRC` in the Makefiles), so editing a `.lisp` file rebuilds the image. Adding a file
+to `script.2` means adding it to `LISPSRC` too.
 
 Memory defaults are compile-time (`PARMS` in the Makefiles): `CELLS=100000` (cons cells), `ATOMS=3000`, `STACK=1500`, `ARRAY=5000` (print names/strings/reals/arrays). `LAST_UPDATE_{YEAR,MONTH,DAY}` in the Makefiles feed the `-DYEAR/-DMONTH/-DDAY` startup banner — bump them when releasing.
 
@@ -42,20 +40,29 @@ Memory defaults are compile-time (`PARMS` in the Makefiles): `CELLS=100000` (con
 
 Flags: `-c` cells, `-a` atoms, `-s` stack, `-p` print names, `-x` no image, `-h` usage. The number may be attached (`-c200000`) or separated (`-c 200000`).
 
-There is no test harness. Verify changes by piping expressions to a fresh interpreter:
+`make test` runs the regression suite in `tests/` — see `tests/README.md` for the case
+format and for what each case detects. `make testdebug` runs it against the ASan/UBSan
+build. Add a case for anything you fix, and check that it *fails* on the pre-fix binary
+(`Linux/lispf4` + `Linux/basic.img` is the last shipped one) so it is a real detector.
+
+For a quick one-off, pipe expressions to a fresh interpreter:
 
 ```bash
 printf '(PLUS 2 3)\n(EXIT)\n' | ./lispf4 basic.img
 printf '(GETD (QUOTE EDITS))\n(EXIT)\n' | ./lispf4 basic.img
 ```
 
-Raising `-c` when loading an existing image works — `move_()` relocates pointers on ROLLIN. (`Documentation/README.txt` warns against mixing parameters; in practice growing the cell count loads fine. Verify anything you rely on here.)
+Raising `-c` (or `-a`/`-p`) when loading an existing image works — `move_()` relocates
+pointers on ROLLIN, including the pointer part of arrays, which lives in `PNAME` rather
+than in a cell. (`Documentation/README.txt` warns against mixing parameters; in practice
+growing the counts loads fine. `tests/cases/d8-arrayimg.sh` covers the array round trip.
+Verify anything else you rely on here.)
 
 `basic.img` loads an upshift option, so input is case-insensitive there. The raw system (`-x` / `bare.img`) is case-sensitive and all builtins are uppercase.
 
 ## Hard constraints
 
-- **Never regenerate the `.c` files from the `.f` files.** `Lispf41.f`, `Lispf42.f`, `F4COM.FOR`, and `lispf4.orig` are reference-only originals. The C has been hand-modified (F2C runtime removed, dynamic allocation added, portability fixes); re-running F2C destroys all of it. The `.f.c` rules in the Makefiles are commented out for this reason.
+- **Never regenerate the `.c` files from the `.f` files.** `Lispf41.f`, `Lispf42.f`, `F4COM.FOR`, and `lispf4.orig` are reference-only originals. The C has been hand-modified (F2C runtime removed, dynamic allocation added, portability and correctness fixes); re-running F2C destroys all of it. Both Makefiles cancel the inference: the explicit rules are commented out, the suffix rule is gone, and `%.c : %.f` has an empty recipe. That last one matters on macOS and Windows, where the filesystem is case-insensitive and `stat("lispf41.f")` finds `Lispf41.f`.
 - `Documentation/` holds the original manuals and PDFs — treat as read-only historical material.
 - `Linux/`, `Mac/`, `Windows/` hold **committed** prebuilt `lispf4` + `basic.img` for distribution. They are updated by hand at release time (see commits "Add Mac executables", "Linux and Windows exe update"), not by the build.
 - Root-level `lispf4`, `*.o`, `bare.img`, `basic.img` are gitignored build artifacts.

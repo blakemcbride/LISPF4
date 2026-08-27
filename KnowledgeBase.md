@@ -38,6 +38,56 @@ it return wrong characters, which silently misclassified atoms for any caller of
 `NTHCHAR`. Fixed by saving and restoring the printer state across `garb_()`. See
 **Garbage Collection** below for the details and the constraint it imposes.
 
+### Second bug-fix pass (2026-08-27)
+
+See `Bugs1.md`, findings D1-D20. The themes worth carrying forward:
+
+- **`PACK`/`UNPACK` no longer go through the line buffer.** Both used to print their
+  argument into `PRBUFF` with `nchars_()` and read the characters back out. `PRBUFF` is a
+  *line* buffer: `prin1_` calls `terpri_()` as soon as `PRTPOS` passes `MARG`, which
+  flushes and clears it, so everything past the print margin was silently dropped -- an
+  80-character string unpacked to two characters. They now collect the text in a print
+  name the way `CONCAT` does (`IFLG2 = T` makes `terpri_` append each flushed line to
+  `PNAME`) and walk that instead. `UNPACK`, and therefore `NTHCHAR`, has no length limit
+  at all now; it re-reads the print-name bounds with `getpn_` on every character, because
+  the `cons_`/`matom_` in its own loop can collect and move them. `PACK` still hands the
+  text to `iread_` through `PRBUFF` so that digits become a number, but only up to
+  `IOBUFF` (160) characters -- `ratom_` collects a literal atom in `ABUFF`, which is that
+  size. Beyond it `PACK` returns the string it just built rather than a truncation.
+- **The parameter stack is bounded everywhere it grows.** `TOPS_FULL()` in `lispf41.c`
+  guards every loop that pushes one `JACK`/`JILL` slot per element of user data: SUBR
+  argument spreading, LAMBDA binding, extra arguments, `FUNARG` rebuilding, `PROG`
+  variables, and the `EVALA`/`APPLYA` a-lists. The EVAL-entry test at L1600 reserves
+  `HILLW = HILL-150` slots *per call*, which says nothing about a single call with 3000
+  arguments. Each guard discards the half-built frame (`tops = iprev`) before jumping to
+  L25095, so `SYSERROR` has room to run and the user gets a recoverable error 15.
+- **`EVALA`/`APPLYA` no longer hang.** Both branched back to the label they were already
+  at when the stack ran low -- an original FORTRAN typo (`Lispf41.f:1310`) faithfully
+  reproduced by F2C. The loop never reached EVAL, so the SIGINT poll never ran either.
+- **Missing upper-bound tests.** Nine FSUBRs (`AND OR QUOTE SETQ SELECTQ GO GO* FUNCTION
+  PROG`), the `PROG` variable list, the `EVALA`/`APPLYA` a-lists and `OBLIST` tested only
+  `<= NATOM` or nothing at all, so a number -- which encodes as roughly `value + NUMADD`
+  -- was dereferenced about a gigabyte past `CAR`. The house idiom is
+  `if (x <= a_1.natom || x > a_1.nfreet)`; use it on every Lisp pointer before `CAR`/`CDR`.
+- **`move_()` relocates arrays.** An array keeps its pointer part in `PNAME`, holding
+  ordinary Lisp values. `garb_` STEP 6 always relocated them; `move_`, which does the
+  equivalent job on `ROLLIN`, did not, so reloading an image under a different `-c`/`-a`
+  silently corrupted every array pointer slot. `move_` now mirrors STEP 6.
+- **Arithmetic no longer overflows silently.** `PLUS` and `TIMES` test before accumulating
+  and fall into the existing floating path (L16044/L16084) instead of wrapping. `mkreal_`
+  clamps a value that is not finite to +-`FLT_MAX`: `priflo_` cannot print an infinity
+  (`fmod` of one is a NaN and every comparison against a NaN is false, so its L51 output
+  loop never terminates), so `(TIMES 1.0E30 1.0E30)` used to hang the interpreter. That
+  one was not in `Bugs1.md`; it was found while checking the D9 guards.
+- **Float zero.** `ZEROP` now looks at the value, not just the small-integer 0 encoding,
+  and `priflo_` prints `0.` rather than `0` -- the decimal point is the only thing that
+  tells a float from an integer on output, so `PRINT` followed by `READ` used to change
+  the type. `ADD1`/`SUB1` accept floats through the same `gtreal_`/`IRFLAG` path
+  `DIFFERENCE` uses; the rest of the SUBR11 group still wants an index and still refuses.
+- **`OPENF` is implemented.** It was a permanent stub returning 0, so the documented
+  `OPEN0` builtin could only ever answer NIL. It now opens the file on the first free
+  logical unit at or above 10 and returns that unit.
+
 ---
 
 ## File Structure
@@ -271,7 +321,7 @@ Then 22 individual atoms (A000, APPLY, EVAL, FNCELL, LAMBDA, NLAMBDA, NOBIND, T,
 - **ROLLOUT** (`rollou_()`) serializes interpreter state to a binary file
 - **ROLLIN** (`rollin_()`) deserializes state from a binary file
 - Image contains: configuration info (15 words), messages, interpreter registers (area), print names, PNP, CAR/CDR arrays, character constants, character type table
-- When loading with different memory parameters, `move_()` relocates pointer values
+- When loading with different memory parameters, `move_()` relocates pointer values -- in `CAR`/`CDR`, in the `ARGS` block, and in the pointer part of every array, which lives in `PNAME` rather than in a cell
 
 ### Garbage Collection (`garb_()`)
 
@@ -406,27 +456,29 @@ fail. `tests/cases/prolog2-gc.sh` runs one query 301 times under collection pres
 
 | Function | File:Line | Description |
 |----------|-----------|-------------|
-| `main()` | lispf42.c:148 | Entry point, command-line parsing, memory allocation, startup |
-| `init1_()` | lispf42.c:1065 | Machine-dependent initialization (JBYTES, MAXBIG, NUMADD, etc.) |
-| `init2_()` | lispf42.c:1152 | Reads SYSATOMS, initializes atoms/hash table/free lists |
+| `main()` | lispf42.c:165 | Entry point, command-line parsing, memory allocation, startup |
+| `init1_()` | lispf42.c:1145 | Machine-dependent initialization (JBYTES, MAXBIG, NUMADD, etc.) |
+| `init2_()` | lispf42.c:1233 | Reads SYSATOMS, initializes atoms/hash table/free lists |
 | `lispf4_()` | lispf41.c | Main eval/apply loop |
-| `rollin_()` | lispf42.c:1369 | Load binary image file |
-| `rollou_()` | lispf42.c:1536 | Save binary image file |
-| `move_()` | lispf42.c:1592 | Relocate pointers when loading images with different parameters |
-| `garb_()` | lispf42.c:3256 | Garbage collector (mark-and-sweep with compaction) |
-| `shift_()` | lispf42.c:3147 | Character input reader / tokenizer (contains EOF handling at L1300) |
-| `lspex_()` | lispf42.c:4557 | Clean exit routine (prints GC stats, calls `exit(0)`) |
-| `mess_()` | lispf42.c:4603 | Print system message by number (messages defined in SYSATOMS) |
-| `rda1_()` | lispf42.c:4902 | Low-level line reader; sets `ieof=2` on end-of-file |
-| `matom_()` | lispf42.c:4144 | Atom creation |
-| `getcht_()` | lispf42.c:~4445 | Query character type table |
-| `setcht_()` | lispf42.c:~4470 | Set character type table entry |
+| `rollin_()` | lispf42.c:1449 | Load binary image file |
+| `rollou_()` | lispf42.c:1635 | Save binary image file |
+| `move_()` | lispf42.c:1691 | Relocate pointers on ROLLIN: CAR/CDR, the ARGS block, **and the pointer part of every array** (mirrors `garb_` STEP 6) |
+| `garb_()` | lispf42.c:3393 | Garbage collector (mark-and-sweep with compaction) |
+| `shift_()` | lispf42.c:3261 | Character input reader / tokenizer (contains EOF handling at L1300) |
+| `lspex_()` | lispf42.c:4714 | Clean exit routine (prints GC stats, calls `exit(0)`) |
+| `mess_()` | lispf42.c:4760 | Print system message by number (messages defined in SYSATOMS) |
+| `rda1_()` | lispf42.c:5065 | Low-level line reader; sets `ieof=2` on end-of-file |
+| `matom_()` | lispf42.c:4319 | Atom creation. `k > 0` interns a literal atom from the `k` bytes in `ABUFF`; `k <= 0` makes an unhashed string of length `-k`. **`ABUFF` is 160 bytes, so that is the hard ceiling on a literal atom.** |
+| `priflo_()` | lispf42.c:2490 | Print a float. L51 assumes a finite value; `mkreal_` guarantees one |
+| `openf_()` | lispf42.c:5340 | `OPEN0`: open a file on the first free logical unit >= 10 |
+| `getcht_()` | lispf42.c:4625 | Query character type table |
+| `setcht_()` | lispf42.c:4644 | Set character type table entry |
 | `getch_()` | auxillary.c | Read byte -> blank-padded character in an integer |
 | `putch_()` | auxillary.c | Store a character's low byte into a byte array |
 | `f4_fp()` | auxillary.c | Validated lookup of a logical unit's `FILE*` (NULL if bad/closed) |
-| `f4_open()` | auxillary.c:41 | Open file on logical unit |
-| `f4_read()` | auxillary.c:83 | Read formatted (text) data |
-| `f4_readu()` | auxillary.c:102 | Read unformatted (binary) data |
+| `f4_open()` | auxillary.c:72 | Open file on logical unit |
+| `f4_read()` | auxillary.c:170 | Read formatted (text) data |
+| `f4_readu()` | auxillary.c:199 | Read unformatted (binary) data |
 
 ---
 
@@ -487,10 +539,30 @@ returns NULL for a closed unit, so every `f4_*` entry point reports failure inst
 
 ### IOTAB
 
-`(IOTAB unit-type unit-number)` redirects input/output:
-- `(IOTAB 1 N)` - set input unit to N
-- `(IOTAB 2 N)` - set output unit to N (etc.)
-This is how `script.2` reads Lisp files: opens a file on a unit, redirects input to it via IOTAB.
+`(IOTAB entry value)` reads and sets the I/O table, which is the `/B/` block from `LUNIN`
+onwards (`#define iotab ((integer *)&b_1.lunin)`). It returns the old value.
+
+| Entry | Field | Meaning |
+|---|---|---|
+| 1 | `LUNIN` | input logical unit (`T` = back to `LUNINS`) |
+| 2 | `RDPOS` | read cursor |
+| 3 | `LMARGR` | left read margin |
+| 4 | `MARGR` | right read margin |
+| 5 | `LUNUT` | output logical unit (`T` = back to `LUNUTS`) |
+| 6 | `PRTPOS` | print cursor |
+| 7 | `LMARG` | left print margin |
+| 8 | `MARG` | right print margin |
+| 9 | `LEVELL` | print length |
+| 10 | `LEVELP` | print level |
+
+This is how `script.2` reads Lisp files: open a file on a unit, then redirect input to it
+with `(IOTAB 1 unit)`.
+
+Each entry is clamped: the read margins against `IOBUFF`, the print margins against
+`IOBUFF-20` (so `priint_`'s 19-digit scratch area stays inside `PRBUFF`), the unit numbers
+against `MAXLUN` -- and a unit that is not open is refused. A left margin may not pass its
+right margin: `LMARGR > MARGR` made `shift_` read and discard a whole input line per call
+and never yield a character, which swallowed the rest of the session.
 
 ---
 

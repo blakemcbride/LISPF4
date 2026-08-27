@@ -22,11 +22,30 @@ ALIAS = -fno-strict-aliasing
 
 CFLAGS = -Dstricmp=strcasecmp $(OPT) $(ALIAS) $(M32) $(PARMS) -DYEAR=$(LAST_UPDATE_YEAR) -DMONTH=$(LAST_UPDATE_MONTH) -DDAY=$(LAST_UPDATE_DAY)
 
-.f.c:
-	f2c -onetrip -A -h $<
+# NEVER regenerate the C from the FORTRAN.  Lispf41.f, Lispf42.f, F4COM.FOR
+# and lispf4.orig are reference-only originals; the C has been hand-modified
+# (F2C runtime removed, dynamic allocation added, portability and correctness
+# fixes) and re-running F2C would destroy all of it.  The explicit rules below
+# are commented out, but a live ".f.c" suffix rule was not enough on its own:
+# make chains suffix rules, so lispf41.o <- lispf41.c <- lispf41.f is a path it
+# will happily take, and on a case-insensitive filesystem (macOS, Windows)
+# stat("lispf41.f") finds Lispf41.f.  Cancel the inference outright.
+# An empty recipe: the .c IS the source of truth, so there is simply nothing
+# to do.  (A failing recipe would break the build on a case-insensitive
+# filesystem whenever the .f happened to check out newer.)
+%.c : %.f ;
+
+.SUFFIXES:
+.SUFFIXES: .c .o
 
 
-basic.img : bare.img script.2
+# basic.img is built by loading these into bare.img -- see script.2.  Without
+# them as prerequisites, editing a .lisp file produced no rebuild and no
+# message, and the stale image was silently kept.
+LISPSRC = basic1.lisp basic2.lisp io1.lisp func1.lisp debug1.lisp \
+          debug2.lisp edit.lisp makef.lisp history.lisp
+
+basic.img : bare.img script.2 $(LISPSRC)
 	./lispf4 bare.img <script.2
 
 bare.img : lispf4 SYSATOMS script.1

@@ -9,6 +9,7 @@
 #include <time.h>
 #include <signal.h>
 #include <math.h>
+#include <float.h>
 #include "f2c.h"
 
 #include "lispf4.h"
@@ -414,7 +415,9 @@ L2:
 {
 /* OMMON AND INTEGER DECLARATIONS */
 /* OMMON AND INTEGER DECLARATIONS END */
-    if (b_1.jp > a_1.nstack) {
+/*                                      TWO SLOTS ARE READ, SO TWO MUST BE */
+/*                                      THERE -- NOT JUST THE FIRST */
+    if (b_1.jp + 1 > a_1.nstack) {
 	goto L2;
     }
     *i__ = b_1.stack[b_1.jp - 1];
@@ -449,7 +452,9 @@ L2:
 {
 /* OMMON AND INTEGER DECLARATIONS */
 /* OMMON AND INTEGER DECLARATIONS END */
-    if (b_1.jp > a_1.nstack) {
+/*                                      THREE SLOTS ARE READ, SO THREE MUST */
+/*                                      BE THERE -- NOT JUST THE FIRST */
+    if (b_1.jp + 2 > a_1.nstack) {
 	goto L2;
     }
     *i__ = b_1.stack[b_1.jp - 1];
@@ -484,6 +489,12 @@ L2:
 {
 /* OMMON AND INTEGER DECLARATIONS */
 /* OMMON AND INTEGER DECLARATIONS END */
+/*                                      IP = 0 WOULD READ STACK(0).  SIGNAL */
+/*                                      "PDL EMPTY" (17) THE WAY APOP DOES. */
+    if (b_1.ip < 1) {
+	*i__ = 17;
+	return 0;
+    }
     *i__ = b_1.stack[b_1.ip - 1];
     --b_1.ip;
     return 0;
@@ -1684,7 +1695,10 @@ L91:
 
     /* Local variables */
 #define args  ((integer *)&b_1.arg)  /* ((integer *)&b_1)  */
-    static integer i__, j, i1, i2;
+#define jpname ((integer *) b_1.pname)   /*  ((integer *)&b_1 + 1122)  */
+    extern /* Subroutine */ int arrutl_(integer *, integer *, integer *, 
+	    integer *, integer *);
+    static integer i__, j, i1, i2, ind1, len;
 
 /* OMMON AND INTEGER DECLARATIONS */
 /* OMMON AND INTEGER DECLARATIONS END */
@@ -1713,6 +1727,27 @@ L91:
 /* L20: */
 	i2 = a_1.nfreet;
     }
+/*             AN ARRAY KEEPS ITS POINTER PART IN PNAME, NOT IN CAR/CDR, AND */
+/*             THOSE SLOTS HOLD ORDINARY LISP VALUES -- CONS POINTERS, ATOMS */
+/*             AND SMALL-INTEGER ENCODINGS.  THEY NEED EXACTLY THE SAME */
+/*             RELOCATION; GARB DOES IT IN STEP 6 (LABEL 622 ABOVE). */
+    i__2 = a_1.natomp;
+    for (i__ = b_1.nil; i__ <= i__2; ++i__) {
+	if (carcdr_1.car[i__ - 1] != b_1.array) {
+	    continue;
+	}
+	ind1 = 0;
+	len = 0;
+/*                                      ARRUTL RETURNS WITHOUT STORING IF */
+/*                                      IBREAK IS SET, SO DO NOT LET A STALE */
+/*                                      IND1/LEN DRIVE THE LOOP BELOW */
+	arrutl_(&i__, &c__3, &c__1, &ind1, &len);
+	for (; len >= 1; --len, ++ind1) {
+	    if (jpname[ind1 - 1] > *min__ && jpname[ind1 - 1] <= *max__) {
+		jpname[ind1 - 1] += *diff;
+	    }
+	}
+    }
     i__2 = b_1.nargs;
     for (i__ = 1; i__ <= i__2 || i__ == 1; ++i__) {
 	if (args[i__ - 1] > *min__ && args[i__ - 1] <= *max__) {
@@ -1723,6 +1758,7 @@ L91:
     return 0;
 } /* move_ */
 
+#undef jpname
 #undef args
 
 
@@ -2458,18 +2494,15 @@ L9100:
 
 /* Subroutine */ int priflo_(real *r__)
 {
-    /* System generated locals */
-    integer i__1;
-
     /* Builtin functions */
     double r_mod(real *, real *);
 
     /* Local variables */
-    static integer ipos0, i__;
-    static real o, s, u;
+    static integer ipos0;
+    static real s;
     static integer limit, ie;
     extern /* Subroutine */ int priint_(integer *);
-    static integer len, num;
+    static integer num;
 
 /* OMMON AND INTEGER DECLARATIONS */
 /* OMMON AND INTEGER DECLARATIONS END */
@@ -2477,7 +2510,7 @@ L9100:
     if (*r__ < 0.f) {
 	goto L2;
     } else if (*r__ == 0) {
-	goto L9;
+	goto L10;
     } else {
 	goto L3;
     }
@@ -2513,22 +2546,14 @@ L45:
     s /= 10.f;
     goto L45;
 L46:
-    u = s;
-    i__1 = a_1.iresol;
-    for (i__ = 1; i__ <= i__1 || i__ == 1; ++i__) {
-	if (u >= 1.f) {
-	    len = i__;
-	}
-/* L48: */
-#ifdef FORTRAN_LIB
-	u = r_mod(&u, &c_b239) * 10.f;
-#else
-	u = fmod((double)u, (double) c_b239) * 10.0;
-#endif
-    }
 /* *** CHANGED BY TR */
+/*   The loop that used to stand here computed a digit count into LEN and a */
+/*   scratch value into U, and nothing ever read either one; the assignment */
+/*   below was written "IE = O" against a variable with no store anywhere in */
+/*   the program, which only meant zero because F2C makes locals static.     */
+/*   Both are written out plainly now: below 10**IRESOL, use F format.       */
     if (ie < a_1.iresol) {
-	ie = o;
+	ie = 0;
     }
 /*                                      NORMALIZE */
 L50:
@@ -2542,6 +2567,14 @@ L50:
 /* IF 10**IRESOL GT LARGEST INTEGER PRIINT MUST BE CALLED IN LOOP */
 L51:
     if (*r__ < (real) a_1.maxbig) {
+	goto L52;
+    }
+/*  With IRESOL <= LOG10(MAXBIG) the normalisation above always leaves R */
+/*  below MAXBIG, so only a value that is not finite can reach here -- and */
+/*  it would spin forever, since FMOD of an infinity is a NaN.  MKREAL now */
+/*  keeps those out of the system; stop here too rather than trust that. */
+    if (! (*r__ - *r__ == 0.f)) {
+	*r__ = 0.f;
 	goto L52;
     }
     num = (integer) (*r__ / a_1.rmax);
@@ -2592,8 +2625,19 @@ L8:
     }
     b_1.prbuff[b_1.prtpos - 1] = chars_1.echar;
     ++b_1.prtpos;
-L9:
+/* L9: */
     priint_(&ie);
+    return 0;
+/*                                      A DECIMAL POINT IS WHAT TELLS A FLOAT */
+/*                                      FROM AN INTEGER ON OUTPUT, AND ZERO */
+/*                                      NEEDS IT TOO OR PRINT/READ SILENTLY */
+/*                                      CHANGES THE TYPE.  (L9 CANNOT DO THIS */
+/*                                      -- IT IS ALSO THE EXPONENT PRINTER, */
+/*                                      AND R IS OFTEN 0. BY THEN.) */
+L10:
+    priint_(&ie);
+    b_1.prbuff[b_1.prtpos - 1] = chars_1.dot;
+    ++b_1.prtpos;
     return 0;
 } /* priflo_ */
 
@@ -4508,6 +4552,14 @@ L12:
     b_1.ibreak = TRUE_;
 /*                                      MAKE THE NUMBER */
 L2:
+/*  A value that is not finite must never enter the system: PRIFLO cannot */
+/*  print one (FMOD of an infinity is a NaN, and every comparison against a */
+/*  NaN is false, so its output loop never terminates) and every predicate */
+/*  built on comparison misbehaves.  Clamp it, the way GTREAL already clamps */
+/*  an out-of-range integer to +-MAXBIG.  */
+    if (! (*r__ - *r__ == 0.f)) {
+	*r__ = *r__ < 0.f ? -FLT_MAX : FLT_MAX;
+    }
     --a_1.numbp;
     b_1.pname[a_1.numbp - 1] = *r__;
     ret_val = a_1.numbp - a_1.dpname;
@@ -4733,6 +4785,9 @@ L4:
 	m = 31;
     }
 /* L1: */
+/*             LUNUTS, NOT LUNUT, ON PURPOSE: A SYSTEM MESSAGE IS ALMOST */
+/*             ALWAYS AN ERROR REPORT AND MUST REACH THE TERMINAL EVEN WHILE */
+/*             OUTPUT IS REDIRECTED TO A FILE BY (IOTAB 5 N). */
     nw = a_1.nbmess / a_1.ibytes;
     i2 = nw * m;
     i__1 = i2 + 1 - nw;
@@ -5282,12 +5337,71 @@ L5:
     return 0;
 } /* dmpout_ */
 
+/*  Longest file name / status / format string XCALL and OPENF will accept.
+    MKCHA clamps to this; anything longer is truncated rather than
+    overrunning.  */
+#define	XCALL_NAMELEN	255
+
 integer openf_(integer *i__)
 {
     /* System generated locals */
-    real ret_val = 0;
+    integer ret_val;
 
+    /* Local variables */
+    extern /* Subroutine */ int mkcha_(integer *, char *, ftnlen, int *);
+    integer x, ifile, iflg, imode, lun;
+    int len;
+    char name__[XCALL_NAMELEN + 1];
+    char mode[4];
+
+/*  (OPEN0 FILE INPUT MODE) reaches here as the list (FILE INPUT . MODE).
+    INPUT non-NIL opens for reading, otherwise for writing; MODE non-NIL means
+    a ROLLIN/ROLLOUT image, i.e. binary.  Returns the logical unit the file was
+    opened on -- usable by INUNIT, OUTUNIT, ROLLIN and ROLLOUT -- or 0 if it
+    could not be opened.  (This was a stub returning 0 unconditionally, so
+    OPEN0 could only ever answer NIL.)  */
+
+    x = *i__;
     *i__ = 0;
+    if (x <= a_1.natom || x > a_1.nfreet) {
+	return 0;
+    }
+    ifile = carcdr_1.car[x - 1];
+    x = carcdr_1.cdr[x - 1];
+    if (x <= a_1.natom || x > a_1.nfreet) {
+	return 0;
+    }
+    iflg = carcdr_1.car[x - 1];
+    imode = carcdr_1.cdr[x - 1];
+/*                                      THE FILE NAME MUST BE AN ATOM */
+    if (ifile <= b_1.nil || ifile > a_1.natomp) {
+	return 0;
+    }
+    mkcha_(&ifile, name__, (ftnlen) XCALL_NAMELEN, &len);
+    name__[len] = '\0';
+    if (len < 1) {
+	return 0;
+    }
+    strcpy(mode, iflg != b_1.nil ? "r" : "w");
+    if (imode != b_1.nil) {
+	strcat(mode, "b");
+    }
+/*                                      FIRST FREE UNIT ABOVE THE RESERVED */
+/*                                      ONES (4 = SYSATOMS, 5/6 = TERMINAL) */
+    for (lun = 10; lun <= b_1.maxlun; ++lun) {
+	if (lun != b_1.lunsys && lun != b_1.lunins && lun != b_1.lunuts
+		&& ! f4_isopen(lun)) {
+	    break;
+	}
+    }
+    if (lun > b_1.maxlun) {
+	return 0;
+    }
+    if (f4_open(lun, name__, mode) != 0) {
+	return 0;
+    }
+    *i__ = lun;
+    ret_val = lun;
     return ret_val;
 } /* openf_ */
 
@@ -5325,14 +5439,18 @@ integer openf_(integer *i__)
     s_wsfe(&io___258);
     e_wsfe();
 #else
-    f4_write_char(*lun, &chars_1.space);
+    {
+/*                                      THE FORTRAN WROTE '1' IN COLUMN 1, */
+/*                                      I.E. CARRIAGE CONTROL FOR FORM FEED. */
+/*                                      A BLANK -- WHICH IS WHAT USED TO GO */
+/*                                      OUT HERE -- IS CARRIAGE CONTROL FOR */
+/*                                      "SINGLE SPACE", SO (EJECT) DID NOTHING. */
+	static const integer formfeed = '\f';
+	f4_write_char(*lun, &formfeed);
+    }
 #endif
     return 0;
 } /* eject_ */
-
-/*  Longest file name / status / format string XCALL will accept.  MKCHA
-    clamps to this; anything longer is truncated rather than overrunning.  */
-#define	XCALL_NAMELEN	255
 
 integer xcall_(integer *fn, integer *x)
 {
@@ -5423,9 +5541,14 @@ L1000:
 	    c4[len4] = '\0';
 	    if (!stricmp(c3, "NEW"))
 		    strcpy(mode, "w");
+	    else if (!stricmp(c3, "APPEND"))
+		    strcpy(mode, "a");
 	    else
 		    strcpy(mode, "r");
-#ifndef unix
+/*  `unix` is a GNU-mode predefined macro, so -std=c99 used to send the Linux
+    build down the Windows branch and hand fopen "rt"/"wt".  Ask about the
+    platform that actually needs the suffix.  */
+#ifdef _WIN32
 	    if (!stricmp(c4, "FORMATTED"))
 		    strcat(mode, "t");
 	    else

@@ -11,6 +11,16 @@
 #define SHOWINT(x)	fprintf(stderr, #x " = %d\n", x)
 
 
+/* Parameter-stack (JACK/JILL) guard.  The only general test the interpreter
+   makes is at the top of EVAL (L1600), and it reserves HILLW = HILL-150 slots
+   per *call*.  Every loop that pushes one slot per element of user data -- an
+   argument list, a LAMBDA list, a PROG variable list, an EVALA a-list -- must
+   re-test the bound itself or it runs off the end of both heap blocks.  The
+   60-slot reserve matches the one EVALA/APPLYA already used and leaves room
+   for SYSERROR to run.  Callers jump to L25095 ("PDL full", ERRTYP 15). */
+#define TOPS_FULL()	(jaan_1.tops >= jaan_1.hill - 60)
+
+
 static int shostk_(void);
 
 
@@ -487,6 +497,10 @@ L1690:
 	goto L1695;
     }
 /*                                      ! ARG2 HOLDS THE ARGLIST */
+    if (TOPS_FULL()) {
+	jaan_1.tops = iprev;
+	goto L25095;
+    }
     ++jaan_1.tops;
     jaan_1.jack[jaan_1.tops - 1] = b_1.subarg;
     jaan_1.jill[jaan_1.tops - 1] = carcdr_1.car[b_1.arg2 - 1];
@@ -658,6 +672,10 @@ L1760:
     }
 /*                                      ! THERE WERE NO LAMBDALIST */
 /*                                      ! OR IT IS EXAUSTED */
+    if (TOPS_FULL()) {
+	jaan_1.tops = iprev;
+	goto L25095;
+    }
     ++jaan_1.tops;
     jaan_1.jack[jaan_1.tops - 1] = carcdr_1.car[icar - 1];
     jaan_1.jill[jaan_1.tops - 1] = carcdr_1.car[b_1.arg2 - 1];
@@ -685,6 +703,10 @@ L1771:
 /*          WE PUT THE EXTRA ARGS ABOVE THE "REAL" ONES. */
 /*          THESE ARGS ALL GET THE NAME -*- */
 
+    if (TOPS_FULL()) {
+	jaan_1.tops = iprev;
+	goto L25095;
+    }
     ++jaan_1.tops;
     jaan_1.jack[jaan_1.tops - 1] = b_1.subarg;
     jaan_1.jill[jaan_1.tops - 1] = carcdr_1.car[b_1.arg2 - 1];
@@ -888,6 +910,10 @@ L1821:
     b_1.temp3 = carcdr_1.car[b_1.temp2 - 1];
     if (b_1.temp3 <= a_1.natom || b_1.temp3 > a_1.nfreet) {
 	goto L1822;
+    }
+    if (TOPS_FULL()) {
+	jaan_1.tops = iprev;
+	goto L25095;
     }
     ++jaan_1.tops;
     b_1.temp2 = carcdr_1.cdr[b_1.temp2 - 1];
@@ -1241,11 +1267,21 @@ L3050:
 /* SUBR1  TEST ON NUMERICAL ARG */
 
 L3070:
+    ll = l - b_1.subr0;
+/*                                      ! ADD1 (1) AND SUB1 (6) ARE MATH */
+/*                                      ! FUNCTIONS AND TAKE FLOATS TOO; THE */
+/*                                      ! REST OF SUBR11 REALLY WANTS AN */
+/*                                      ! INDEX, SO KEEP REJECTING NON-INTEGERS. */
+    if (b_1.arg > a_1.nfreet && b_1.arg <= a_1.bignum && (ll == 1 || ll == 6)) {
+	irflag = b_1.t;
+	r__ = gtreal_(&b_1.arg, &i__);
+	r__ += ll == 1 ? 1.f : -1.f;
+	goto L3110;
+    }
     if (b_1.arg <= a_1.bignum) {
 	goto L25000;
     }
     *n = b_1.arg - a_1.numadd;
-    ll = l - b_1.subr0;
     switch (ll) {
 	case 1:  goto L11000;
 	case 2:  goto L11010;
@@ -1876,6 +1912,12 @@ L11330:
 
 L11340:
     min__ = b_1.arg;
+    if (min__ < b_1.nil || min__ > a_1.natomp) {
+	goto L25000;
+    }
+/*                                          ! MUST BE AN ATOM INDEX -- THE */
+/*                                          ! ONE-TRIP LOOP BELOW RUNS EVEN */
+/*                                          ! WHEN THE BOUND IS ABSURD */
     *ires = b_1.nil;
     i__1 = min__;
     i__2 = a_1.natomp;
@@ -1967,6 +2009,13 @@ L11415:
 L11420:
     if (b_1.arg == a_1.numadd) {
 	goto L3100;
+    }
+    if (b_1.arg > a_1.nfreet && b_1.arg <= a_1.bignum) {
+/*                                          ! A NUMBER IN THE BIGNUM AREA */
+	r__ = gtreal_(&b_1.arg, &i__);
+	if (r__ == 0.f) {
+	    goto L3100;
+	}
     }
     goto L3090;
 /* ----------------------------------------------------------------------- */
@@ -2151,17 +2200,26 @@ L12130:
 /* EVALA */
 
 L12140:
+    if (b_1.arg2 > a_1.nfreet) {
+	goto L25010;
+    }
+/*                                      ! THE A-LIST MUST BE A LIST */
     iprev = jaan_1.tops;
     ++jaan_1.tops;
     jaan_1.jack[jaan_1.tops - 1] = b_1.sform;
     jaan_1.jill[jaan_1.tops - 1] = b_1.arg2;
 L12141:
+    if (b_1.arg2 <= a_1.natom || b_1.arg2 > a_1.nfreet) {
+	goto L12142;
+    }
+/*                                      ! END OF A-LIST, OR A DOTTED TAIL */
     b_1.temp1 = carcdr_1.car[b_1.arg2 - 1];
     if (b_1.temp1 <= a_1.natom || b_1.temp1 > a_1.nfreet) {
 	goto L12142;
     }
-    if (jaan_1.tops > jaan_1.hill - 60) {
-	goto L12141;
+    if (TOPS_FULL()) {
+	jaan_1.tops = iprev;
+	goto L25095;
     }
     ++jaan_1.tops;
     b_1.arg2 = carcdr_1.cdr[b_1.arg2 - 1];
@@ -2186,7 +2244,8 @@ L12150:
 L12160:
     iprev = jaan_1.tops;
     b_1.temp1 = getnum_(&b_1.arg2);
-    if (b_1.temp1 > jaan_1.tops || (b_1.temp1 != 0 && jaan_1.jack[b_1.temp1 - 1] > 0)) {
+    if (b_1.temp1 < 0 || b_1.temp1 > jaan_1.tops || (b_1.temp1 != 0 && jaan_1.jack[
+	    b_1.temp1 - 1] > 0)) {
 	goto L25035;
     }
     ++jaan_1.tops;
@@ -2504,17 +2563,59 @@ L12519:
 /* PACK */
 
 L12520:
-    b_1.arg2 = nchars_(&b_1.arg, &b_1.arg2) - a_1.numadd;
-    b_1.arg2 = b_1.prtpos - 1;
+/*             PRBUFF IS A *LINE* BUFFER: AS SOON AS PRTPOS PASSES MARG, */
+/*             PRIN1 CALLS TERPRI, WHICH FLUSHES AND CLEARS IT.  READING THE */
+/*             TEXT BACK OUT OF PRBUFF THEREFORE USED TO LOSE EVERY CHARACTER */
+/*             PAST THE PRINT MARGIN, SILENTLY.  COLLECT IT IN A PRINT NAME */
+/*             INSTEAD, THE WAY CONCAT DOES (IFLG2 = T MAKES TERPRI APPEND */
+/*             EACH FLUSHED LINE TO PNAME), THEN HAND THAT TO IREAD. */
+    b_1.temp1 = matom_(&c__0);
+/*                                      TEMP1 IS AN ARGS SLOT, SO IT GUARDS */
+/*                                      THE NEW PRINT NAME FROM GARB */
+    if (b_1.temp1 == b_1.nil) {
+	*ires = b_1.nil;
+	goto L998;
+    }
+/*                                      NOT VIA 12440: NCHARS HAS NOT RUN, SO */
+/*                                      THERE IS NO PUSHED PRTPOS TO POP */
+    b_1.iflg2 = b_1.t;
+    nch = nchars_(&b_1.arg, &b_1.arg2);
+    terpri_();
+/*                                      FLUSH THE LAST PARTIAL LINE TOO */
+    b_1.iflg2 = b_1.nil;
+    b_1.arg2 = 0;
+    if (0 <= getpn_(&b_1.temp1, &main, &jb, &ipl)) {
+	b_1.arg2 = ipl;
+    }
 /*                                       SAVE CHT,CHR */
 /*                                      ALSO FROM GETINT */
 /* L12530: */
     if (b_1.arg2 > 0) {
-	goto L12535;
+	goto L12525;
     }
     *ires = matom_(&c__0);
     goto L12440;
-L12535:
+L12525:
+    if (b_1.arg2 <= b_1.iobuff) {
+	goto L12530;
+    }
+/*                                      RATOM COLLECTS A LITERAL ATOM IN */
+/*                                      ABUFF, WHICH HOLDS IOBUFF BYTES, SO */
+/*                                      A LONGER RESULT CANNOT BE AN ATOM. */
+/*                                      RETURN THE STRING WE JUST BUILT -- */
+/*                                      SAME CHARACTERS, NOTHING LOST -- */
+/*                                      RATHER THAN A TRUNCATION. */
+    *ires = b_1.temp1;
+    goto L12440;
+L12530:
+    i__1 = jb;
+    i__2 = b_1.arg2;
+    for (i__ = 1; i__ <= i__2; ++i__) {
+	getch_(b_1.pname, &ic, &i__1);
+	b_1.prbuff[i__ - 1] = ic;
+	++i__1;
+    }
+/* L12535: */
     n1 = b_1.cht;
     n2 = b_1.chr;
     b_1.cht = 0;
@@ -2702,6 +2803,12 @@ L12690:
 	goto L25020;
     }
     i__ = getnum_(&b_1.arg);
+    if (i__ < 0) {
+	goto L25020;
+    }
+/*                                      ! MATOM READS A POSITIVE LENGTH AS */
+/*                                      ! "INTERN FROM ABUFF" -- NEVER LET A */
+/*                                      ! NEGATIVE COUNT GET THAT FAR */
     if (0 > getpn_(&b_1.arg2, &main, &jb, &ipl)) {
 	goto L25010;
     }
@@ -2712,7 +2819,7 @@ L12690:
     }
     getch_(b_1.pname, &ich, &jb);
     i__1 = i__;
-    for (j = 1; j <= i__1 || j == 1; ++j) {
+    for (j = 1; j <= i__1; ++j) {
 	putch_(b_1.pname, &ich, &a_1.jbp);
 /* L12710: */
 	++a_1.jbp;
@@ -2806,6 +2913,23 @@ L12745:
     if (n2 < 1 || n2 > *n) {
 	goto L25010;
     }
+/*                                      ! A LEFT MARGIN PAST ITS RIGHT MARGIN */
+/*                                      ! MAKES SHIFT DISCARD A WHOLE INPUT */
+/*                                      ! LINE PER CALL AND NEVER YIELD A */
+/*                                      ! CHARACTER (LMARGR=3, MARGR=4, */
+/*                                      ! LMARG=7, MARG=8) */
+    if (n1 == 3 && n2 > b_1.margr) {
+	goto L25010;
+    }
+    if (n1 == 4 && n2 < b_1.lmargr) {
+	goto L25010;
+    }
+    if (n1 == 7 && n2 > b_1.marg) {
+	goto L25010;
+    }
+    if (n1 == 8 && n2 < b_1.lmarg) {
+	goto L25010;
+    }
 /*                                      ! DON'T SELECT A UNIT THAT IS NOT OPEN */
 /*                                      ! (N1=1 IS LUNIN, N1=5 IS LUNUT) */
     if ((n1 == 1 || n1 == 5) && ! f4_isopen(n2)) {
@@ -2834,16 +2958,39 @@ L12746:
 /* UNPACK */
 
 L12750:
+/*             SEE PACK (L12520): PRBUFF ONLY EVER HELD THE LAST LINE, SO */
+/*             ANYTHING PAST THE PRINT MARGIN WAS SILENTLY DROPPED.  BUILD */
+/*             THE WHOLE TEXT AS A PRINT NAME AND WALK THAT INSTEAD -- NO */
+/*             LINE BUFFER, AND SO NO LENGTH LIMIT. */
+    b_1.temp1 = matom_(&c__0);
+/*                                      BEFORE THE CONS BELOW: MATOM MAY RUN */
+/*                                      THE ATOM COLLECTOR */
+    if (b_1.temp1 == b_1.nil) {
+	*ires = b_1.nil;
+	goto L998;
+    }
     i__1 = cons_(&b_1.arg, &b_1.nil);
+    b_1.iflg2 = b_1.t;
     nch = nchars_(&i__1, &b_1.arg2);
+    terpri_();
+    b_1.iflg2 = b_1.nil;
     *ires = b_1.nil;
+    nch = 0;
+    if (0 <= getpn_(&b_1.temp1, &main, &jb, &ipl)) {
+	nch = ipl;
+    }
 L12760:
-    --b_1.prtpos;
-    if (b_1.prtpos == 0) {
+    if (nch < 1) {
 	goto L12440;
     }
 /*                               12440 = RETURN TO NCHARS AND RESET PRBUF */
-    ic = b_1.prbuff[b_1.prtpos - 1];
+/*                                      REFETCH EVERY TIME: THE CONS AND THE */
+/*                                      MATOM BELOW CAN COLLECT AND MOVE THE */
+/*                                      PRINT NAME OUT FROM UNDER US */
+    getpn_(&b_1.temp1, &main, &jb, &ipl);
+    i__1 = jb + nch - 1;
+    getch_(b_1.pname, &ic, &i__1);
+    --nch;
     ict = getcht_(&ic);
     if (ict < 13 || ict > 22) {
 	goto L12770;
@@ -2873,17 +3020,26 @@ L12780:
 /* APPLYA */
 
 L15000:
+    if (b_1.arg3 > a_1.nfreet) {
+	goto L25026;
+    }
+/*                                      ! THE A-LIST MUST BE A LIST */
     iprev = jaan_1.tops;
     ++jaan_1.tops;
     jaan_1.jack[jaan_1.tops - 1] = b_1.sform;
     jaan_1.jill[jaan_1.tops - 1] = b_1.arg3;
 L15001:
+    if (b_1.arg3 <= a_1.natom || b_1.arg3 > a_1.nfreet) {
+	goto L15002;
+    }
+/*                                      ! END OF A-LIST, OR A DOTTED TAIL */
     b_1.temp1 = carcdr_1.car[b_1.arg3 - 1];
     if (b_1.temp1 <= a_1.natom || b_1.temp1 > a_1.nfreet) {
 	goto L15002;
     }
-    if (jaan_1.tops > jaan_1.hill - 60) {
-	goto L15001;
+    if (TOPS_FULL()) {
+	jaan_1.tops = iprev;
+	goto L25095;
     }
     ++jaan_1.tops;
     b_1.arg3 = carcdr_1.cdr[b_1.arg3 - 1];
@@ -2909,7 +3065,8 @@ L15010:
 L15012:
     iprev = jaan_1.tops;
     b_1.temp1 = getnum_(&b_1.arg3);
-    if (b_1.temp1 > jaan_1.tops || (b_1.temp1 != 0 && jaan_1.jack[b_1.temp1 - 1] > 0)) {
+    if (b_1.temp1 < 0 || b_1.temp1 > jaan_1.tops || (b_1.temp1 != 0 && jaan_1.jack[
+	    b_1.temp1 - 1] > 0)) {
 	goto L25036;
     }
     ++jaan_1.tops;
@@ -3243,6 +3400,10 @@ L16040:
 	if (s != 0.f || irflag != b_1.nil) {
 	    goto L16044;
 	}
+	if ((j > 0 && *n > a_1.maxbig - j) || (j < 0 && *n < -a_1.maxbig - j)) {
+	    goto L16044;
+	}
+/*                                      ! WOULD OVERFLOW -- GO FLOATING */
 	*n += j;
 	goto L16060;
 L16044:
@@ -3304,6 +3465,13 @@ L16080:
 	if (s != 0.f || irflag != b_1.nil) {
 	    goto L16084;
 	}
+	if (j != 0) {
+	    ii = a_1.maxbig / (j > 0 ? j : -j);
+	    if (*n > ii || *n < -ii) {
+		goto L16084;
+	    }
+	}
+/*                                      ! WOULD OVERFLOW -- GO FLOATING */
 	*n *= j;
 	goto L16090;
 L16084:
@@ -3353,6 +3521,10 @@ L18000:
 /* FUNCTION */
 
 L18010:
+    if (b_1.arg <= a_1.natom || b_1.arg > a_1.nfreet) {
+	goto L25080;
+    }
+/*                                          ! FSUBR ARGLIST MUST BE A LIST */
     icar = carcdr_1.car[b_1.arg - 1];
     icdr = carcdr_1.cdr[b_1.arg - 1];
     if (! (icdr <= a_1.natom || icdr > a_1.nfreet)) {
@@ -3410,6 +3582,10 @@ L18017:
 /* GO* */
 
 L18020:
+    if (b_1.arg <= a_1.natom || b_1.arg > a_1.nfreet) {
+	goto L25080;
+    }
+/*                                          ! FSUBR ARGLIST MUST BE A LIST */
     iret = 2;
     b_1.arg = carcdr_1.car[b_1.arg - 1];
     goto L20000;
@@ -3417,6 +3593,10 @@ L18020:
 /* GO */
 
 L18030:
+    if (b_1.arg <= a_1.natom || b_1.arg > a_1.nfreet) {
+	goto L25080;
+    }
+/*                                          ! FSUBR ARGLIST MUST BE A LIST */
     b_1.arg = carcdr_1.car[b_1.arg - 1];
     iret = 1;
     goto L20000;
@@ -3424,12 +3604,20 @@ L18030:
 /* QUOTE */
 
 L18040:
+    if (b_1.arg <= a_1.natom || b_1.arg > a_1.nfreet) {
+	goto L25080;
+    }
+/*                                          ! FSUBR ARGLIST MUST BE A LIST */
     *ires = carcdr_1.car[b_1.arg - 1];
     goto L999;
 
 /* SETQ */
 
 L18050:
+    if (b_1.arg <= a_1.natom || b_1.arg > a_1.nfreet) {
+	goto L25080;
+    }
+/*                                          ! FSUBR ARGLIST MUST BE A LIST */
     icar = carcdr_1.car[b_1.arg - 1];
     apush2_(&l, &icar);
     icdr = carcdr_1.cdr[b_1.arg - 1];
@@ -3461,6 +3649,10 @@ L18070:
     if (b_1.arg == b_1.nil) {
 	goto L18069;
     }
+    if (b_1.arg <= a_1.natom || b_1.arg > a_1.nfreet) {
+	goto L25080;
+    }
+/*                                          ! FSUBR ARGLIST MUST BE A LIST */
     apush_(&b_1.arg);
     k = b_1.arg;
 L18090:
@@ -3524,6 +3716,10 @@ L18139:
 /* OR */
 
 L18140:
+    if (b_1.arg <= a_1.natom || b_1.arg > a_1.nfreet) {
+	goto L25080;
+    }
+/*                                          ! FSUBR ARGLIST MUST BE A LIST */
     apush_(&b_1.arg);
     k = b_1.arg;
 L18160:
@@ -3548,6 +3744,10 @@ L18170:
 /* SELECTQ */
 
 L18200:
+    if (b_1.arg <= a_1.natom || b_1.arg > a_1.nfreet) {
+	goto L25080;
+    }
+/*                                          ! FSUBR ARGLIST MUST BE A LIST */
     b_1.arg = carcdr_1.car[b_1.arg - 1];
     apush_(&b_1.form);
     ++b_1.ip;
@@ -3648,6 +3848,10 @@ L20050:
 
 /*             PROLOGUE OF PROG */
 L20060:
+    if (b_1.arg <= a_1.natom || b_1.arg > a_1.nfreet) {
+	goto L25080;
+    }
+/*                                          ! FSUBR ARGLIST MUST BE A LIST */
     iprev = jaan_1.tops;
     ++jaan_1.tops;
     jaan_1.jack[jaan_1.tops - 1] = b_1.sform;
@@ -3663,27 +3867,38 @@ L20060:
 /*        ==================== */
 
 L20070:
-    if (icar <= a_1.natom) {
+    if (icar <= a_1.natom || icar > a_1.nfreet) {
 	goto L20093;
     }
 /*                                     ! READY */
     b_1.temp1 = carcdr_1.car[icar - 1];
-    if (b_1.temp1 <= a_1.natom) {
+    if (b_1.temp1 <= a_1.natom || b_1.temp1 > a_1.nfreet) {
 	goto L20090;
     }
 /*                                     ! SET VAR TO NIL */
+    if (TOPS_FULL()) {
+	goto L20092;
+    }
     ++jaan_1.tops;
     jaan_1.jack[jaan_1.tops - 1] = carcdr_1.car[b_1.temp1 - 1];
     b_1.temp2 = carcdr_1.cdr[b_1.temp1 - 1];
     jaan_1.jill[jaan_1.tops - 1] = carcdr_1.car[b_1.temp2 - 1];
     goto L20091;
 L20090:
+    if (TOPS_FULL()) {
+	goto L20092;
+    }
     ++jaan_1.tops;
     jaan_1.jack[jaan_1.tops - 1] = b_1.temp1;
     jaan_1.jill[jaan_1.tops - 1] = b_1.nil;
 L20091:
     icar = carcdr_1.cdr[icar - 1];
     goto L20070;
+/*        PARAMETER STACK FULL WHILE SPREADING THE PROG VARIABLES */
+L20092:
+    jaan_1.tops = iprev;
+    b_1.jp += 2;
+    goto L25095;
 /*        READY FIX BLOCK */
 L20093:
     ++jaan_1.tops;

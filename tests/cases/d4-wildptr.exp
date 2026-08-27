@@ -1,0 +1,55 @@
+READY
+--- Illegal argument (fsubr)
+AND - 5
+(AND BROKEN)
+--- Illegal argument (fsubr)
+OR - 5
+(OR BROKEN)
+--- Illegal argument (fsubr)
+QUOTE - 5
+'BROKEN
+--- Illegal argument (fsubr)
+SETQ - 5
+(SETQ BROKEN)
+--- Illegal argument (fsubr)
+SELECTQ - 5
+(SELECTQ BROKEN)
+--- Illegal argument (fsubr)
+GO - 5
+(GO BROKEN)
+--- Illegal argument (fsubr)
+GO* - 5
+(GO* BROKEN)
+--- Illegal argument (fsubr)
+FUNCTION - 5
+(FUNCTION BROKEN)
+--- Illegal argument (fsubr)
+PROG - 5
+(PROG BROKEN)
+--- Illegal argument (fsubr)
+QUOTE - 5
+'BROKEN
+1
+--- Illegal argument (subr2)
+EVALA - 5
+(EVALA BROKEN)
+--- Illegal argument (subr3)
+APPLYA - 5
+(APPLYA BROKEN)
+--- Illegal argument (subr1)
+OBLIST - 5
+(OBLIST BROKEN)
+--- Illegal environment 18
+EVSTK - -5
+(EVSTK BROKEN)
+--- Illegal environment 18
+APPLYSTK - -5
+(APPLYSTK BROKEN)
+--- Illegal argument (subr2)
+STRALLOC - -5
+(STRALLOC BROKEN)
+--- Illegal argument (subr2)
+IOTAB - 160
+(IOTAB BROKEN)
+T
+333

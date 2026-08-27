@@ -1,8 +1,9 @@
 # LISPF4 regression suite
 
-Built as Phase 0 of `Plan1.md`. Every bug in `Bugs1.md` that can be observed from outside
-the interpreter has a case here. Each one was verified to **fail before** its fix and pass
-after, so the suite is a real detector rather than a description of current behaviour.
+Built as Phase 0 of `Plan1.md`, and extended with every later finding. Every bug that can
+be observed from outside the interpreter has a case here. Each one was verified to **fail
+before** its fix and pass after, so the suite is a real detector rather than a description
+of current behaviour.
 
 ## Running
 
@@ -37,11 +38,11 @@ Scratch output lands in `tests/.work/` (gitignored) — `NAME.out` is the raw se
 ## Expected result today
 
 ```
-passed: 25   failed: 0   known failures: 0   unexpected passes: 0
+passed: 35   failed: 0   known failures: 0   unexpected passes: 0
 ```
 
-All of `Bugs1.md` is fixed, so there are no `.bug` markers left. The driver exits 0 and
-fails on any new breakage.
+Everything found so far is fixed, so there are no `.bug` markers left. The driver exits 0
+and fails on any new breakage.
 
 ## Case types
 
@@ -119,10 +120,17 @@ Because of this, avoid writing cases whose output includes an atom index (an arr
 
 ## Sanitizer status
 
-Last run 2026-08-04 with gcc 16.1.1, ASan + UBSan, strict options. **No reports** from any
-of the following:
+Last run 2026-08-27, ASan + UBSan, strict options. **No reports** from any of the
+following:
 
-- the full 19-case suite;
+- the full 35-case suite;
+- every D-series reproduction, run individually: the nine dotted FSUBR forms,
+  `(PROG 5 ...)`, `(EVALA 'X 5)`, `(OBLIST 5)`, `(EVSTK 'X -5)`, `(STRALLOC -5 "AB")`,
+  `(IOTAB 3 160)`, `(APPLY 'LIST <3000 args>)`, a 2999-variable `PROG`, `EVALA` against a
+  600-pair a-list under `-s400`, and `PACK`/`UNPACK`/`NTHCHAR` at 50, 160, 300, 400 and
+  2500 characters;
+- 40 rounds of `UNPACK` on a 250-character string with an atom-compacting `(RECLAIM 3)`
+  after each, which is the case the new print-name walk in `UNPACK` has to survive;
 - the complete two-stage image bootstrap (`lispf4 -x <script.1`, then
   `lispf4 bare.img <script.2`, loading all eight packages) — which also produced a
   `basic.img` byte-identical to the `-O3` build;
@@ -131,7 +139,9 @@ of the following:
   (confirmed under gdb — that is the hardest of the Phase 2 code paths and the suite alone
   does not reach it);
 - deep recursion to parameter-stack overflow, the structure editor (`EDITF`), and roughly
-  ten error/break paths.
+  ten error/break paths;
+- loading all nine on-demand packages (`match struct astruct quote static printa schum
+  prolog prolog2`), a `MAKEFILE`/`LOAD` round trip, and an `EDITF` session.
 
 Worth re-running after any change to the GC, the array code, or the I/O layer.
 
@@ -148,6 +158,33 @@ pre-fix source instead, e.g. `git show HEAD:ifdo.lisp`.
 `l5-savedef` is a guard, not a detector: removing a duplicate definition is behaviour-neutral
 by design. Likewise `l3-define`'s first three cases — only the fourth (`NLAMDA` spelling)
 distinguishes fixed from unfixed.
+
+## D-series cases (second bug-fix pass, 2026-08-27)
+
+Seven cases, one per family of defect. Each was checked against the shipped pre-fix
+`Linux/lispf4` + `Linux/basic.img` and fails there, so each is a detector and not a
+description. `KnowledgeBase.md` -> *Second bug-fix pass (2026-08-27)* explains the fixes.
+
+| Case | What it pins down | How it fails pre-fix |
+|---|---|---|
+| `d1-packunpack` | `PACK`/`UNPACK`/`NTHCHAR` past the print margin | `UNPACK` of an 80-character string returns 2 characters; `NTHCHAR` past the margin returns NIL |
+| `d2-pdlfull` | parameter-stack bound in the spreading loops | `(APPLY 'LIST <3000 args>)` and a 2999-variable `PROG` both segfault |
+| `d3-evala` | `EVALA`/`APPLYA` with a nearly full stack | both spin forever under `-s400`; the case times out |
+| `d4-wildptr` | missing upper-bound tests on Lisp pointers | the nine dotted FSUBR forms segfault; so do `(PROG 5 ...)`, `(EVALA 'X 5)` and `(OBLIST 5)`. Also covers `EVSTK` with a negative frame, `(STRALLOC -5 ...)` and `(IOTAB 3 160)` |
+| `d8-arrayimg` | `move_` relocating array pointer parts on ROLLIN | reloading an image with `-c200000` returns the free list where a cons was stored |
+| `d9-arith` | integer and float overflow, float zero, `ADD1`/`SUB1` | `(TIMES 1.0E30 1.0E30)` hangs the printer; integer overflow wraps; float zero prints as `0`; `(ADD1 1.5)` is refused |
+| `d20-io` | `OPEN0` and `EJECT` | `OPEN0` always answers NIL; `(EJECT)` writes a blank |
+
+Two defects from that pass have no in-interpreter symptom, both in the makefiles. Check
+them by hand: `make -n lispf4` after `touch Lispf41.f` must not run F2C, and `make -n`
+after `touch basic2.lisp` must rebuild `basic.img`. The partial bound checks in
+`apop2_`/`apop3_`/`fpop_` and the never-assigned local in `priflo_` are latent; they were
+cleared by inspection and by the `-Wall -Wextra` build.
+
+`d1-packunpack` is worth understanding before touching `PACK` again: `UNPACK` and
+`NTHCHAR` now have no length limit, but `PACK` returns a *string* rather than a literal
+atom past 160 characters, because `ratom_` collects a literal atom in `ABUFF` and that is
+how big `ABUFF` is. The case pins both sides of that boundary.
 
 ## Variance cases
 
