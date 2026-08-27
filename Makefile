@@ -72,7 +72,7 @@ test : basic.img
 # If libasan/libubsan are not installed the link will fail -- either install
 # them (dnf install libasan libubsan) or drop -fsanitize=... below and use gdb.
 # Several Bugs1.md findings (notably B7) only show up under the sanitizers.
-DBGFLAGS = -g -O0 -fsanitize=address,undefined -fno-omit-frame-pointer
+DBGFLAGS = -g -O0 -fsanitize=address,undefined,float-cast-overflow -fno-omit-frame-pointer
 
 lispf4dbg : lispf41.c lispf42.c auxillary.c f2c.h lispf4.h
 	gcc -o $@ $(DBGFLAGS) $(ALIAS) -Dstricmp=strcasecmp $(M32) $(PARMS) \

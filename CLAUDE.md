@@ -38,7 +38,7 @@ Memory defaults are compile-time (`PARMS` in the Makefiles): `CELLS=100000` (con
 ./lispf4 -c200000 -a5000 basic.img    # override cells/atoms/stack/pnames at runtime
 ```
 
-Flags: `-c` cells, `-a` atoms, `-s` stack, `-p` print names, `-x` no image, `-h` usage. The number may be attached (`-c200000`) or separated (`-c 200000`).
+Flags: `-c` cells, `-a` atoms, `-s` stack, `-p` print names, `-x` no image, `-h` usage. The number may be attached (`-c200000`) or separated (`-c 200000`). Options must precede the image file name; a trailing option, an unknown option, and `-x` together with an image file are all errors with a non-zero exit.
 
 `make test` runs the regression suite in `tests/` — see `tests/README.md` for the case
 format and for what each case detects. `make testdebug` runs it against the ASan/UBSan
@@ -52,11 +52,16 @@ printf '(PLUS 2 3)\n(EXIT)\n' | ./lispf4 basic.img
 printf '(GETD (QUOTE EDITS))\n(EXIT)\n' | ./lispf4 basic.img
 ```
 
-Raising `-c` (or `-a`/`-p`) when loading an existing image works — `move_()` relocates
-pointers on ROLLIN, including the pointer part of arrays, which lives in `PNAME` rather
-than in a cell. (`Documentation/README.txt` warns against mixing parameters; in practice
-growing the counts loads fine. `tests/cases/d8-arrayimg.sh` covers the array round trip.
-Verify anything else you rely on here.)
+Changing `-c`/`-a`/`-s`/`-p` when loading an existing image works — `move_()` relocates
+every stored value on ROLLIN: cons cells, floats, small integers, and the pointer part of
+arrays, which lives in `PNAME` rather than in a cell. The float shift needs `NATOM` as it
+was at SYSOUT time, which the header does not carry, so `ROLLOUT` appends a two-word
+trailer (`ROLLMAGIC`, `NATOM`); images written before that still load, and older
+interpreters ignore it. The one thing that cannot survive is a small integer larger than
+the new system's `ISMALL` — a bigger `-c` or `-a` means a smaller small-integer range, so
+such a value saturates. (`Documentation/README.txt` warns against mixing parameters; that
+predates these fixes. `tests/cases/d8-arrayimg.sh`, `e3-floatimg.sh`, `e3-negimg.sh` and
+`e3-oldimg.sh` cover the round trips.)
 
 `basic.img` loads an upshift option, so input is case-insensitive there. The raw system (`-x` / `bare.img`) is case-sensitive and all builtins are uppercase.
 
@@ -90,7 +95,11 @@ F2C-derived idioms you must preserve when editing:
 
 Not in `basic.img`, loadable on demand: `ifdo.lisp` (IF/DO WHILE/FOR, needs `match.lisp`), `match.lisp`, `struct.lisp`, `astruct.lisp`, `prolog.lisp`, `quote.lisp`, `static.lisp`, `printa.lisp`, `schum.lisp`.
 
-`SYSATOMS` defines the builtin function tables read by `init2_()` during bare startup: seven SUBR groups (SUBR0, SUBR1, SUBR11, SUBR2, SUBR3, SUBRN, FSUBR), then individual atoms, then the numbered system messages. Atoms are created in file order, and the eval loop dispatches builtins by comparing an atom's index against the group boundary registers — so **adding or reordering entries shifts every subsequent builtin's dispatch group**. `SYSATOMS` is read only during `-x` startup; existing images carry their own atom table and will not pick up the change. Regenerate from the bottom: `make realclean && make`.
+`SYSATOMS` defines the builtin function tables read by `init2_()` during bare startup: seven SUBR groups (SUBR0, SUBR1, SUBR11, SUBR2, SUBR3, SUBRN, FSUBR), then individual atoms, then the numbered system messages. Atoms are created in file order, and the eval loop dispatches builtins by comparing an atom's index against the group boundary registers — so **adding or reordering entries shifts every subsequent builtin's dispatch group**. `SYSATOMS` is read only during `-x` startup; existing images carry their own atom table and will not pick up the change. Regenerate from the bottom: `make realclean && make`. `init2_()` now checks every read: a
+`SYSATOMS` that runs out mid-table, or whose message section is short of `MAXMES` lines,
+prints a diagnostic and exits 1 instead of quietly building an image with a shifted
+message table. Keep the file LF-terminated (`.gitattributes` says so); CRLF used to be
+exactly that failure.
 
 Super-parenthesis is `]` (closes back to the matching `[`), changed from the original `<>` to match InterLisp.
 

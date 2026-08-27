@@ -1,0 +1,8 @@
+#  SYSATOMS is read by INIT2 during system generation.  A CRLF copy used to
+#  build a corrupt image silently (E15); read1() now folds CRLF and INIT2
+#  refuses a short file, but keeping the checkout LF everywhere is still the
+#  right default -- the same goes for the build scripts and the Lisp sources,
+#  which the interpreter reads through the same path.
+SYSATOMS	text eol=lf
+script.*	text eol=lf
+*.lisp		text eol=lf

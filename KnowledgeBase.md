@@ -88,6 +88,58 @@ See `Bugs1.md`, findings D1-D20. The themes worth carrying forward:
   `OPEN0` builtin could only ever answer NIL. It now opens the file on the first free
   logical unit at or above 10 and returns that unit.
 
+### Third bug-fix pass (2026-08-27)
+
+See `Bugs2.md`, findings E1-E19. The themes worth carrying forward:
+
+- **The house bounds test belongs one level in, too.** D4-D7 applied
+  `if (x <= a_1.natom || x > a_1.nfreet)` to the values that reach a builtin *directly*.
+  Seven more crashes (E4-E10, E13) were the same omission on values reached one level
+  in: the element of a list, the tail of a dotted pair, the second half of a
+  property-list entry, the argument list a LAMBDA is spread over. When you touch this
+  code, check every `car[X - 1]` / `cdr[X - 1]` where `X` is *not* the value that was
+  just tested. A useful sweep is every list-taking builtin against a list of numbers, a
+  list of dotted pairs, and a list with a numeric tail -- the previous pass varied the
+  arguments, which is why it missed these.
+- **A property list is writable from Lisp.** `(RPLACD 'FOO 5)` is legal, so every walk
+  of an atom's plist has to cope with a malformed one. `get_` now answers NIL for a
+  malformed plist, the two hand-inlined copies of it in EAPPLY (`L1671`, `L1786`) fall
+  back to `get_` rather than trusting the shape, and `PUT` refuses instead of storing
+  through a value cell that is not a pair -- that store was an out-of-bounds write with a
+  caller-chosen offset *and* a caller-chosen value (E2).
+- **Every write into `PRBUFF` must be bounded.** `PRINAT`'s quote loop emitted one `'`
+  per nested `(QUOTE x)` wrapper with no ceiling but the nesting depth of the datum,
+  which runs straight off the end of the `/B/` block and through the `PNAME`/`PNP`/
+  `HTAB`/`STACK` heap pointers (E1). It now wraps with `terpri_()` like the literal loop
+  at `L300`. The `PROG`-label outdent in `LINEBREAK` is clamped at column 1 for the same
+  reason (E14).
+- **`ROLLIN` relocation is three regions, not two.** See the ROLLIN/ROLLOUT section
+  below; this is E3, and it silently changed the value of saved data.
+- **The ordering predicates compare integers as integers.** `GREATERP`, `LESSP` and
+  `ALPHORDER` converted both operands to `real` -- a 24-bit mantissa -- while small
+  integers run to 1073690323, so every pair differing below the 2**24 granule compared
+  equal and `EQUAL`, which has always been exact, disagreed with them. They now take the
+  integer path when `gtreal_` returns 0.0 for both operands, and promote the mixed case
+  to `doublereal` (E11).
+- **`EQUAL` notices A-stack overflow and polls the break flag.** `apush2_` signals
+  overflow by leaving the marker 16 in the F-stack and restoring `JP`; `subpr_` and
+  `prin1_` both test for it and `equal_` did not, so CAR-circular arguments span forever.
+  There is still no cycle detection: a CDR-circular comparison does not grow the stack at
+  all and still loops, but the SIGINT poll now makes it recoverable (E12).
+- **`GARB` jumps to the reset point instead of calling `LISPF4` again.** The old
+  `CALL LISPF4(2)` never returns, so every list-space exhaustion left one
+  `cons_ -> garb_ -> lispf4_` chain on the C stack for the rest of the session -- about
+  1100 of them exhaust a 1 MB stack. `lispf4_` now arms a `setjmp` (`f4_reset` in
+  `lispf4.h`) at entry and `garb_` `longjmp`s to it, falling back to `lspex_()` if
+  `LISPF4` has not been entered yet, which it has not when `GARB` runs from `INIT2` (E17).
+- **System generation fails loudly.** A CRLF `SYSATOMS` used to build a corrupt image in
+  silence: `read1()` treated the CR as end-of-line and left the LF for the next
+  `f4_start_read`, so the file read as alternating real and blank lines. `IREAD` skips
+  blank lines so the atom groups still parsed, but `MESS`'s `RDA4` reads exactly `MAXMES`
+  lines and took on the blanks, shifting every diagnostic the system prints. `read1()`
+  now folds CRLF, and `INIT2` refuses a short file rather than reading the rest of the
+  atom table off standard input (E15). A `.gitattributes` keeps the checkout LF.
+
 ---
 
 ## File Structure
@@ -191,6 +243,18 @@ lispf4 [-c N] [-a N] [-s N] [-p N] [-x] [FILE.IMG]
 ```
 
 The numeric argument can be attached (`-c200000`) or separated by a space (`-c 200000`).
+
+Options must come **before** the image file name; a trailing one used to be dropped in
+silence and is now an error. An unrecognised option exits non-zero (`-h`, `-?` and
+`--help` are the successful requests for the usage text), and `-x` together with an image
+file is refused rather than ignored.
+
+Reloading an image under different `-c`/`-a`/`-s`/`-p` works: `move_()` relocates every
+stored value, floats and array pointer slots included (see ROLLIN/ROLLOUT below). The one
+thing that cannot survive is a small integer larger than the new system's `ISMALL`, which
+saturates -- a bigger `-c` or `-a` means a smaller small-integer range.
+`Documentation/README.txt` warns against mixing parameters; that warning predates the
+relocation fixes.
 
 The `LAST_UPDATE_YEAR`, `LAST_UPDATE_MONTH`, and `LAST_UPDATE_DAY` variables in the Makefiles control the date shown in the startup message "Lisp F4, latest update = ..." They are passed to the compiler as `-DYEAR=`, `-DMONTH=`, `-DDAY=`.
 
@@ -320,8 +384,50 @@ Then 22 individual atoms (A000, APPLY, EVAL, FNCELL, LAMBDA, NLAMBDA, NOBIND, T,
 
 - **ROLLOUT** (`rollou_()`) serializes interpreter state to a binary file
 - **ROLLIN** (`rollin_()`) deserializes state from a binary file
-- Image contains: configuration info (15 words), messages, interpreter registers (area), print names, PNP, CAR/CDR arrays, character constants, character type table
-- When loading with different memory parameters, `move_()` relocates pointer values -- in `CAR`/`CDR`, in the `ARGS` block, and in the pointer part of every array, which lives in `PNAME` rather than in a cell
+- Image contains: configuration info (15 words -- the first 15 words of `/A/`), messages,
+  interpreter registers (area), print names, PNP, CAR/CDR arrays, character constants,
+  character type table, and a two-word trailer
+- The trailer is `ROLLMAGIC` (`0x4C463441`, "LF4A") followed by `NATOM`. It is optional
+  on input: an image written before it existed simply ends after the character table, and
+  `ROLLIN`'s probe for it is deliberately kept out of the `ierr` chain. Older
+  interpreters ignore the two extra words, so images stay readable in both directions --
+  `tests/cases/e3-oldimg.sh` guards that against the shipped `Linux/basic.img`.
+
+**Relocation.** There are three regions above the atom indices, each with its own shift:
+
+| region | old range | shift |
+|---|---|---|
+| cons cells | `(NFREPO, NFRETO]` | `IDIFF1 = NFREET - NFRETO` |
+| floats ("bignums") | `(NFRETO, BIGOLD]` | `IDIFF3 = BIGNUM - BIGOLD` |
+| small integers | `(BIGOLD, MAXINT]` | decode with `NUMADO`, re-encode with `NUMADD` |
+
+`move_()` makes **one** pass and classifies each value before touching it, so nothing can
+be relocated twice whatever the shifts are. It covers `CAR`/`CDR`, the `ARGS` block, and
+the pointer part of every array, which lives in `PNAME` rather than in a cell.
+
+`BIGNUM = NFREET + NATOM`, so the float shift is `IDIFF1 + (NATOM_new - NATOM_old)` --
+which is why the trailer exists. The header carries `NUMADO` but not `NATOM`, and
+
+```
+NUMADD = MAXINT - (MAXINT - BIGNUM - 1)/2
+```
+
+inverts only to `2*NUMADO - MAXINT - 1 = BIGNUM_old + (BIGNUM_old mod 2)`: exact as the
+*boundary* between floats and small integers (the extra index, when there is one, encodes
+nothing), but one too high as a *shift* when `BIGNUM_old` was odd. Without a trailer,
+`ROLLIN` assumes `NATOM` is unchanged, which settles the parity bit for every reload that
+does not pass a different `-a`.
+
+Before this was fixed (E3) the code made two passes, both with ranges derived from the
+*new* `BIGNUM`, and shifted the floats by the cell offset. Reloading under a different
+`-a` therefore aimed every float at the wrong `PNAME` slot -- it read back as whatever
+four bytes of packed print-name text lived there -- and a different `-c` left the most
+negative small integers below the start of the small-integer pass, where they came back
+as cons cells. Nothing crashed; the data was just wrong.
+
+A small integer that no longer fits the smaller `ISMALL` of a larger system saturates.
+That value genuinely has no encoding in the new configuration; saturating is the honest
+answer and it is what `tests/cases/e3-negimg.sh` expects.
 
 ### Garbage Collection (`garb_()`)
 
@@ -456,29 +562,32 @@ fail. `tests/cases/prolog2-gc.sh` runs one query 301 times under collection pres
 
 | Function | File:Line | Description |
 |----------|-----------|-------------|
-| `main()` | lispf42.c:165 | Entry point, command-line parsing, memory allocation, startup |
-| `init1_()` | lispf42.c:1145 | Machine-dependent initialization (JBYTES, MAXBIG, NUMADD, etc.) |
-| `init2_()` | lispf42.c:1233 | Reads SYSATOMS, initializes atoms/hash table/free lists |
+| `main()` | lispf42.c:188 | Entry point, command-line parsing, memory allocation, startup |
+| `init1_()` | lispf42.c:1224 | Machine-dependent initialization (JBYTES, MAXBIG, NUMADD, etc.) |
+| `init2_()` | lispf42.c:1312 | Reads SYSATOMS, initializes atoms/hash table/free lists |
 | `lispf4_()` | lispf41.c | Main eval/apply loop |
-| `rollin_()` | lispf42.c:1449 | Load binary image file |
-| `rollou_()` | lispf42.c:1635 | Save binary image file |
-| `move_()` | lispf42.c:1691 | Relocate pointers on ROLLIN: CAR/CDR, the ARGS block, **and the pointer part of every array** (mirrors `garb_` STEP 6) |
-| `garb_()` | lispf42.c:3393 | Garbage collector (mark-and-sweep with compaction) |
-| `shift_()` | lispf42.c:3261 | Character input reader / tokenizer (contains EOF handling at L1300) |
-| `lspex_()` | lispf42.c:4714 | Clean exit routine (prints GC stats, calls `exit(0)`) |
-| `mess_()` | lispf42.c:4760 | Print system message by number (messages defined in SYSATOMS) |
-| `rda1_()` | lispf42.c:5065 | Low-level line reader; sets `ieof=2` on end-of-file |
-| `matom_()` | lispf42.c:4319 | Atom creation. `k > 0` interns a literal atom from the `k` bytes in `ABUFF`; `k <= 0` makes an unhashed string of length `-k`. **`ABUFF` is 160 bytes, so that is the hard ceiling on a literal atom.** |
-| `priflo_()` | lispf42.c:2490 | Print a float. L51 assumes a finite value; `mkreal_` guarantees one |
-| `openf_()` | lispf42.c:5340 | `OPEN0`: open a file on the first free logical unit >= 10 |
-| `getcht_()` | lispf42.c:4625 | Query character type table |
-| `setcht_()` | lispf42.c:4644 | Set character type table entry |
+| `rollin_()` | lispf42.c:1556 | Load binary image file |
+| `rollou_()` | lispf42.c:1753 | Save binary image file |
+| `move_()` | lispf42.c:1860 | Relocate stored values on ROLLIN: CAR/CDR, the ARGS block, **and the pointer part of every array** (mirrors `garb_` STEP 6). One pass; `reloc_` (lispf42.c:1830) classifies each value into cells / floats / small integers first, so nothing is relocated twice |
+| `equal_()` | lispf42.c:704 | Structural equality. No cycle detection: it tests `apush2_`'s overflow marker and polls the break flag, so a circular comparison is bounded or killable rather than an unrecoverable hang |
+| `get_()` | lispf42.c:797 | Property lookup. Answers NIL for a malformed property list -- `RPLACD` on an atom can produce one, and EAPPLY's two hand-inlined copies fall back here |
+| `prinat_()` | lispf42.c:2459 | Print one atom, plus the leading `'` for each nested `(QUOTE x)`. Every write into `PRBUFF` here is bounded by `MARG` |
+| `garb_()` | lispf42.c:3590 | Garbage collector (mark-and-sweep with compaction) |
+| `shift_()` | lispf42.c:3454 | Character input reader / tokenizer (contains EOF handling at L1300) |
+| `lspex_()` | lispf42.c:4925 | Clean exit routine (prints GC stats, calls `exit(0)`) |
+| `mess_()` | lispf42.c:4971 | Print system message by number (messages defined in SYSATOMS) |
+| `rda1_()` | lispf42.c:5284 | Low-level line reader; sets `ieof=2` on end-of-file |
+| `matom_()` | lispf42.c:4526 | Atom creation. `k > 0` interns a literal atom from the `k` bytes in `ABUFF`; `k <= 0` makes an unhashed string of length `-k`. **`ABUFF` is 160 bytes, so that is the hard ceiling on a literal atom.** |
+| `priflo_()` | lispf42.c:2675 | Print a float. L51 assumes a finite value; `mkreal_` guarantees one |
+| `openf_()` | lispf42.c:5559 | `OPEN0`: open a file on the first free logical unit >= 10 |
+| `getcht_()` | lispf42.c:4832 | Query character type table |
+| `setcht_()` | lispf42.c:4853 | Set character type table entry |
 | `getch_()` | auxillary.c | Read byte -> blank-padded character in an integer |
 | `putch_()` | auxillary.c | Store a character's low byte into a byte array |
 | `f4_fp()` | auxillary.c | Validated lookup of a logical unit's `FILE*` (NULL if bad/closed) |
 | `f4_open()` | auxillary.c:72 | Open file on logical unit |
-| `f4_read()` | auxillary.c:170 | Read formatted (text) data |
-| `f4_readu()` | auxillary.c:199 | Read unformatted (binary) data |
+| `f4_read()` | auxillary.c:184 | Read formatted (text) data |
+| `f4_readu()` | auxillary.c:213 | Read unformatted (binary) data |
 
 ---
 

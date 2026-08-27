@@ -38,7 +38,7 @@ Scratch output lands in `tests/.work/` (gitignored) — `NAME.out` is the raw se
 ## Expected result today
 
 ```
-passed: 35   failed: 0   known failures: 0   unexpected passes: 0
+passed: 55   failed: 0   known failures: 0   unexpected passes: 0
 ```
 
 Everything found so far is fixed, so there are no `.bug` markers left. The driver exits 0
@@ -120,10 +120,16 @@ Because of this, avoid writing cases whose output includes an atom index (an arr
 
 ## Sanitizer status
 
-Last run 2026-08-27, ASan + UBSan, strict options. **No reports** from any of the
-following:
+Last run 2026-08-27, ASan + UBSan + `float-cast-overflow`, strict options. (GCC keeps
+`float-cast-overflow` out of the default `-fsanitize=undefined` set and it is what catches
+E16, so it is now in `DBGFLAGS`.) **No reports** from any of the following:
 
-- the full 35-case suite;
+- the full 55-case suite;
+- a sweep of every SUBR against 16 structurally malformed arguments and 8 malformed second
+  arguments -- 12 528 forms. The same sweep finds 64 segfaults on the pre-fix binary;
+- 6 000 randomly generated nested forms over the builtin table, including dotted tails at
+  every level;
+- every E-series reproduction from `Bugs2.md`, run individually;
 - every D-series reproduction, run individually: the nine dotted FSUBR forms,
   `(PROG 5 ...)`, `(EVALA 'X 5)`, `(OBLIST 5)`, `(EVSTK 'X -5)`, `(STRALLOC -5 "AB")`,
   `(IOTAB 3 160)`, `(APPLY 'LIST <3000 args>)`, a 2999-variable `PROG`, `EVALA` against a
@@ -145,9 +151,12 @@ following:
 
 Worth re-running after any change to the GC, the array code, or the I/O layer.
 
-## Bugs2 cases
+## C- and L-series cases
 
-`c1-array-bounds`, `l2-union`, `l3-define` and `l5-savedef` cover the `Bugs2.md` findings;
+These predate the current `Bugs2.md`; the report they came from has since been replaced by
+the E-series analysis, so they are named for their case prefixes rather than for a file.
+
+`c1-array-bounds`, `l2-union`, `l3-define` and `l5-savedef` cover those findings;
 `l1-ifdo` covers `ifdo.lisp` loading, `ITP` infix evaluation and `prolog.lisp`'s `POP`/`PUSH`.
 
 Note that the `L*` fixes are in `.lisp` sources, not the interpreter, so running the suite
@@ -185,6 +194,45 @@ cleared by inspection and by the `-Wall -Wextra` build.
 `NTHCHAR` now have no length limit, but `PACK` returns a *string* rather than a literal
 atom past 160 characters, because `ratom_` collects a literal atom in `ABUFF` and that is
 how big `ABUFF` is. The case pins both sides of that boundary.
+
+## E-series cases (third bug-fix pass, 2026-08-27)
+
+Twenty cases covering `Bugs2.md` E1-E19. Every one was checked against the shipped pre-fix
+`Linux/lispf4` + `Linux/basic.img`: seventeen fail there, which makes them detectors rather
+than descriptions. `KnowledgeBase.md` -> *Third bug-fix pass (2026-08-27)* explains the
+fixes.
+
+| Case | What it pins down | How it fails pre-fix |
+|---|---|---|
+| `e1-quotes` | `PRINAT`'s unbounded quote loop | 800 nested quotes segfault; so do 400 built by `LIST` rather than typed |
+| `e2-putprop` | `PUT` storing through a malformed plist | `(RPLACD 'FOO (CONS 'BAR 5))` then `(PUTPROP 'FOO 'BAR 1)` segfaults -- an out-of-bounds write at a caller-chosen offset with a caller-chosen value |
+| `e3-floatimg` | `ROLLIN` relocating floats by the cell offset | reloading under `-a4000` prints `0.` for `3.25`; under `-a2500` the floats come back as integers |
+| `e3-negimg` | `ROLLIN` starting the small-integer pass in the wrong place | reloading under `-c200000` prints a list of NILs for `-1073650000` |
+| `e3-oldimg` | image-format compatibility, both directions | guard, not a detector: it passes on both, and must keep doing so |
+| `e4-getprop` | `get_` on a malformed property list | two shapes, both segfault |
+| `e5-fncell` | EAPPLY's two hand-inlined copies of `get_` | `(RPLACD 'ZZ 5)(ZZ)` segfaults; so does a form that rewrites itself while its arguments are being evaluated |
+| `e6-assoc` | `ASSOC`/`SASSOC` walking into a non-pair element | `(ASSOC 'A '(1 2 3))` segfaults; the sweep hit both from 36 argument shapes |
+| `e7-evstk` | `EVSTK`/`APPLYSTK` handing an unvalidated value to `GETNUM` | `(EVSTK 'X NIL)` reads `PNAME` ~400 KB below the allocation |
+| `e8-lambda` | LAMBDA binding over a dotted argument list | `((LAMBDA (X) X) . 5)` segfaults |
+| `e9-progvar` | `(PROG ((X . 5)) ...)` | segfaults |
+| `e10-selectq` | `SELECTQ`'s interior clause walk | a dotted tail anywhere in the clause list segfaults |
+| `e11-compare` | `GREATERP`/`LESSP`/`ALPHORDER` in single precision | `(GREATERP 16777217 16777216)` answers NIL; `MIN` picks the larger |
+| `e12-equal` | `EQUAL` on circular structure | the CAR-circular form never returns and ignores SIGINT |
+| `e13-funarg` | `FUNARG` block decoding | two hand-built blocks, both segfault |
+| `e14-ppprog` | the `PROG`-label outdent writing at `PRBUFF[-3]` | no crash at `-O3`: the label is written into `RDBUFF` and simply vanishes from the output, which is what the `.exp` catches |
+| `e15-crlf` | a CRLF or truncated `SYSATOMS` | the CRLF build produces a different `bare.img` and still exits 0 |
+| `e16-exponent` | `(integer)` conversion of a 20-digit exponent | `1E99999999999999999999` prints as `0.` instead of saturating |
+| `e17-listspace` | `GARB`'s recursive call to `LISPF4` | 1500 list-space exhaustions under a 1 MB stack segfault after about 1100 |
+| `e18-args` | command-line handling | an unknown option exits 0; an option after the image name is dropped |
+
+`e14-ppprog` is the one to understand before touching the pretty-printer: it is an
+exact-output case because the defect is a silent write outside the buffer, not a fault.
+`e17-listspace` needs `ulimit -s 1024` to show anything -- the leak is only visible against
+a bound -- and takes about a second.
+
+`e12-equal` covers what was fixed, not everything that is wrong: `EQUAL` still has no cycle
+detection, so the CDR-circular half of the case asserts only that SIGINT gets you out and
+the interpreter recovers.
 
 ## Variance cases
 

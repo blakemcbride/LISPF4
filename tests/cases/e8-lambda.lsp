@@ -1,0 +1,7 @@
+(PROGN (SYSFLAG 1 NIL) (QUOTE READY))
+((LAMBDA (X) X) . 5)
+((NLAMBDA (X) X) . 5)
+(EVAL (CONS (QUOTE (LAMBDA (X Y) X)) 5))
+((LAMBDA (X Y) (LIST X Y)) 1)
+((LAMBDA (X Y) (LIST X Y)) 1 2)
+(EXIT)

@@ -1,0 +1,12 @@
+READY
+--- Illegal argument (fsubr)
+SELECTQ - ('A . '5)
+(SELECTQ BROKEN)
+--- Illegal argument (fsubr)
+SELECTQ - ('A (B 1) . 5)
+(SELECTQ BROKEN)
+--- Illegal argument (fsubr)
+SELECTQ - (X . 5)
+(SELECTQ BROKEN)
+2
+3

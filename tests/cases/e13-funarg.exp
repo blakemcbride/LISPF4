@@ -1,0 +1,12 @@
+READY
+--- Faulty funarg block
+EVAL - NIL
+(EVAL BROKEN)
+--- Illegal argument (subr1)
+CAR - 1
+(CAR BROKEN)
+--- Faulty funarg block
+EVAL - NIL
+(EVAL BROKEN)
+A
+7

@@ -1,0 +1,13 @@
+READY
+FOO
+--- Illegal argument (subr3)
+PUTPROP - FOO
+(PUTPROP BROKEN)
+FOO2
+2
+V
+V
+W
+W
+R
+(W R)

@@ -1,0 +1,17 @@
+READY
+--- Illegal environment 18
+EVSTK - NIL
+(EVSTK BROKEN)
+--- Illegal environment 18
+EVSTK - A
+(EVSTK BROKEN)
+--- Illegal environment 18
+EVSTK - (1 . 2)
+(EVSTK BROKEN)
+--- Illegal environment 18
+APPLYSTK - NIL
+(APPLYSTK BROKEN)
+--- Illegal environment 18
+APPLYSTK - A
+(APPLYSTK BROKEN)
+7

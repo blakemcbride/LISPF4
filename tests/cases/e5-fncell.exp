@@ -1,0 +1,19 @@
+READY
+ZZ
+--- Undefined function
+APPLY - ZZ
+(APPLY BROKEN)
+ZY
+--- Undefined function
+APPLY - ZY
+(APPLY BROKEN)
+CAR
+A
+((LAMBDA (X) X) (RPLACA F 5))
+--- Undefined function
+APPLY - 5
+(APPLY BROKEN)
+--- Undefined function
+APPLY - (LAMBDA . 5)
+(APPLY BROKEN)
+7

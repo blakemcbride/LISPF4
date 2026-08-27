@@ -19,7 +19,30 @@ extern time_t start_time;
 /*  Set by the SIGINT handler; polled by the interpreter.  */
 volatile sig_atomic_t f4_break_pending = 0;
 
+/*  See lispf4.h: the interpreter's reset point, for GARB's list-space-empty
+    path.  */
+jmp_buf f4_reset;
+int     f4_reset_ready = 0;
+
 #define SHOWINT(x)	fprintf(stderr, #x " = %d\n", x)
+
+/*  Marks the two-word trailer ROLLOUT appends to an image: this word and
+    then NATOM.  The image header records NFRETO but not NATOM, and ROLLIN
+    needs BIGNUM = NFREET + NATOM as it was at ROLLOUT time to relocate the
+    floating-point encodings.  An image written before the trailer existed
+    simply ends after the character table; ROLLIN's probe fails, and it falls
+    back to assuming NATOM is unchanged.  Older interpreters ignore the two
+    extra words, so images stay readable in both directions.  */
+
+#define ROLLMAGIC	((integer) 0x4C463441)	/*  "LF4A"  */
+
+/*  Non-zero while INIT2 is reading SYSATOMS.  End-of-file there always means
+    a truncated or corrupt SYSATOMS, but SHIFT's normal reaction to EOF on a
+    non-terminal unit is to switch the reader back to LUNINS and carry on --
+    which quietly consumes the build script as though it were part of the
+    atom table, and then exits 0 having written no image at all.  */
+
+static int sysgen = 0;
 
 static void usage(char *);
 
@@ -246,15 +269,42 @@ int	main(int argc, char *argv[])
 	    case 'x':
 		    istart = 0; /* no image file but requires SYSATOMS  */
 		    break;
-	    case '-':
 	    case 'h':
 	    case '?':
-	    default:
 		    usage(progname);
 		    return 0;
+	    case '-':
+		    if (!strcmp(argv[1], "--help")) {
+			    usage(progname);
+			    return 0;
+		    }
+		    /* FALLTHROUGH */
+	    default:
+/*  E18: an unrecognised option used to print the usage text and return 0,
+    so `lispf4 -z basic.img` reported success to make or to a script.  Only
+    -h/-?/--help are a successful request for the usage text.  */
+		    fprintf(stderr, "Unknown option '%s'.\n", argv[1]);
+		    usage(progname);
+		    exit(1);
 	    }
 	    argc--;
 	    argv++;
+    }
+/*  E18: the option loop stops at the first argument that does not begin with
+    a '-', so anything after the image file name used to be dropped without a
+    word -- `lispf4 basic.img -c200000` silently ran with the default cell
+    count.  And -x builds from SYSATOMS, so an image file given with it was
+    ignored just as silently.  */
+    if (istart == 0 && argc > 1) {
+	    fprintf(stderr, "-x builds a bare system from SYSATOMS; "
+			    "remove the image file '%s'.\n", argv[1]);
+	    exit(1);
+    }
+    if (istart != 0 && argc > 2) {
+	    fprintf(stderr, "Unexpected argument '%s' after the image file "
+			    "name; options must come first.\n", argv[2]);
+	    usage(progname);
+	    exit(1);
     }
 #endif
 /*  Reject degenerate configurations before allocating.  NPNAME must exceed
@@ -671,6 +721,17 @@ integer equal_(integer *ii, integer *jj)
     i__ = *ii;
     j = *jj;
 L10:
+/*   E12: EQUAL has no cycle detection.  A CDR-circular pair of arguments   */
+/*   goes round the ring forever without even growing the A-stack, and the  */
+/*   loop never polled the break flag, so the only way out was kill -9.     */
+/*   RPLACA/RPLACD/NCONC make circular structure easy to build by accident, */
+/*   and MEMBER and SASSOC are built on EQUAL.                              */
+    if (f4_break_pending) {
+	f4_break_pending = 0;
+	b_1.errtyp = 26;
+	b_1.ibreak = TRUE_;
+	goto L60;
+    }
     if (i__ == j) {
 	goto L50;
     }
@@ -686,6 +747,14 @@ L10:
 /*             I NOT EQ J. I AND J ARE LISTS */
 /* L15: */
     apush2_(&i__, &j);
+/*   E12: APUSH2 signals A-stack overflow by leaving the marker 16 in the   */
+/*   F-stack and restoring JP, so an unnoticed overflow made this loop spin */
+/*   on CAR-circular arguments.  SUBPR and PRIN1 both test the marker;      */
+/*   EQUAL never did.  Answering "not equal" leaves the marker in place,    */
+/*   so LISPF4 still reports the PDL overflow.                              */
+    if (b_1.stack[b_1.ip - 1] == 16) {
+	goto L60;
+    }
     i__ = carcdr_1.car[i__ - 1];
     j = carcdr_1.car[j - 1];
     goto L10;
@@ -747,11 +816,21 @@ L8:
 	goto L20;
     }
 /* L12: */
+/*   E4: the loop steps two cells at a time because a property list is an  */
+/*   even-length proper list -- but nothing enforces that, and RPLACD can  */
+/*   break it.  A malformed plist answers "no such property", which is     */
+/*   what L40 already answers for a missing one.                           */
     k = carcdr_1.cdr[k - 1];
+    if (k <= a_1.natom || k > a_1.nfreet) {
+	goto L40;
+    }
     k = carcdr_1.cdr[k - 1];
     goto L8;
 L20:
     k = carcdr_1.cdr[k - 1];
+    if (k <= a_1.natom || k > a_1.nfreet) {
+	goto L40;
+    }
     ret_val = carcdr_1.car[k - 1];
     return ret_val;
 L40:
@@ -1321,6 +1400,15 @@ L3:
 /*             READ SYSTEM CHARACTERS */
 L4:
     rda1_(&b_1.lunsys, ich, &c__1, &a_1.nchtyp, &ieof);
+/*   E15: a truncated or mis-parsed SYSATOMS used to build a working-looking */
+/*   but subtly wrong image -- a CRLF copy shifted the whole message table   */
+/*   and interned three extra atoms, and -x still exited 0, so make would    */
+/*   then build BASIC.IMG on top of it without a word.  Every read below is  */
+/*   now checked, and system generation stops on the first one that fails.   */
+    if (ieof != 1) {
+	fprintf(stderr, "SYSATOMS ended while reading the character table.\n");
+	exit(1);
+    }
 
 
 
@@ -1400,8 +1488,17 @@ L4:
 /*             SUBR  = LAST FUNCTION WITH N ARGS */
 /*             FSUBR= LAST FSUBR */
     b_1.lunin = b_1.lunsys;
+    sysgen = 1;
     for (i__ = 1; i__ <= 7 || i__ == 1; ++i__) {
 	icar = iread_(&c__0);
+/*   SHIFT REACTS TO END-OF-FILE ON LUNSYS BY SWITCHING THE READER BACK TO */
+/*   LUNINS, SO A SHORT SYSATOMS QUIETLY CARRIES ON READING THE BUILD       */
+/*   SCRIPT FROM STANDARD INPUT.  THAT SWITCH IS THE PRECISE SYMPTOM.       */
+	if (icar == b_1.nil || b_1.lunin != b_1.lunsys) {
+	    fprintf(stderr, "SYSATOMS ended while reading SUBR group %d.\n",
+		    (int) i__);
+	    exit(1);
+	}
 	isys[i__ - 1] = a_1.natomp;
 /* DEBUG      WRITE(LUNUTS,500)NATOMP */
 /* DEBUG500   FORMAT(' NATOMP =',I4) */
@@ -1413,7 +1510,13 @@ L4:
     for (i__ = 1; i__ <= 22 || i__ == 1; ++i__) {
 /* L275: */
 	isys2[i__ - 1] = iread_(&c__0);
+	if (isys2[i__ - 1] == b_1.nil || b_1.lunin != b_1.lunsys) {
+	    fprintf(stderr, "SYSATOMS ended while reading system atom %d.\n",
+		    (int) i__);
+	    exit(1);
+	}
     }
+    sysgen = 0;
     b_1.lunin = b_1.lunins;
 /*                                      SET CAR OF ATOMS */
     i__2 = b_1.nil;
@@ -1428,7 +1531,11 @@ L4:
 /* *SETC*      CALL SETCAR(T,T) */
     carcdr_1.car[b_1.t - 1] = b_1.t;
 /*             INITIALIZE MESS (HAVE MESS TO READ MESSAGES FROM LUNSYS) */
-    mess_(&c__0);
+    if (mess_(&c__0) != 0) {
+	fprintf(stderr, "SYSATOMS: the system message table is short of "
+			"%d lines.\n", (int) a_1.maxmes);
+	exit(1);
+    }
 #ifdef FORTRAN_LIB
     cl__1.cerr = 0;
     cl__1.cunit = b_1.lunsys;
@@ -1458,11 +1565,12 @@ integer rollin_(integer *lun)
 #define acom  ((integer *)&a_1.narea)  /* ((integer *)&a_1)  */
 #define bcom  ((integer *) &chars_1.space)  /*  ((integer *)&chars_1)  */
 #define jbpo (equiv_6 + 10)
-    extern /* Subroutine */ int move_(integer *, integer *, integer *);
+    extern /* Subroutine */ int move_(integer *, integer *, integer *,
+	    integer *, integer *, integer *);
     static integer i__;
-    extern /* Subroutine */ int dmpin_(integer *, integer *, integer *, 
+    extern /* Subroutine */ int dmpin_(integer *, integer *, integer *,
 	    integer *);
-    static integer idiff1, idiff2;
+    static integer idiff1, idiff2, idiff3, bigold, natomo, trail[2];
     extern /* Subroutine */ int dmpin2_(integer *, integer *, integer *, 
 	    integer *);
 #define jpname  ((integer *) b_1.pname)   /*  ((integer *)&b_1 + 1122)   */
@@ -1547,35 +1655,45 @@ integer rollin_(integer *lun)
 			"interpreter state is now incomplete.  Stopping.\n");
 	exit(1);
     }
+/*             OPTIONAL TRAILER: NATOM AS IT WAS AT ROLLOUT TIME.  IMAGES */
+/*             WRITTEN BEFORE THIS EXISTED SIMPLY END HERE, WHICH IS WHY IT */
+/*             IS PROBED SEPARATELY FROM IERR AND WHY A SHORT READ IS NOT AN */
+/*             ERROR.  SEE THE BIGOLD DERIVATION BELOW FOR WHY IT IS WANTED. */
+    natomo = 0;
+    if (dmpin_(lun, trail, &c__1, &c__2) == 0 && trail[0] == ROLLMAGIC) {
+	natomo = trail[1];
+    }
 
 /*             CHECK IF WE NEED TO MOVE POINTERS */
 
-    if (idiff1 >= 0) {
-	goto L22;
+/*             BIGOLD = NFRETO + NATOM-AT-ROLLOUT IS THE TOP OF THE FLOAT */
+/*             REGION AND THE BOTTOM OF THE SMALL-INTEGER ONE, AND BOTH */
+/*             RELOCATIONS ARE MEASURED FROM IT.  THE HEADER DOES NOT CARRY */
+/*             NATOM, BUT IT CARRIES NUMADO, AND */
+
+/*                  NUMADD = MAXINT - (MAXINT - BIGNUM - 1)/2 */
+
+/*             INVERTS TO  2*NUMADO - MAXINT - 1 = BIGNUM_OLD + (BIGNUM_OLD */
+/*             MOD 2) -- EXACT AS A BOUNDARY (THE EXTRA INDEX, WHEN THERE IS */
+/*             ONE, ENCODES NOTHING), BUT ONE TOO HIGH AS A SHIFT WHENEVER */
+/*             BIGNUM_OLD WAS ODD.  THE TRAILER SETTLES THAT BIT OUTRIGHT; */
+/*             WITHOUT IT, ASSUMING NATOM IS UNCHANGED SETTLES IT FOR EVERY */
+/*             RELOAD THAT DOES NOT PASS A DIFFERENT -A. */
+    bigold = *numado - a_1.maxint + *numado - 1;
+    if (natomo <= 0) {
+	natomo = a_1.natom;
     }
-/*      CALL FTYPE('MOVING 1') */
-    i__1 = a_1.nfreep - idiff1;
-    i__2 = a_1.bignum - idiff1;
-    move_(&idiff1, &i__1, &i__2);
-L22:
-    if (idiff2 == 0) {
-	goto L24;
+    if (*nfreto + natomo == bigold - 1) {
+	--bigold;
     }
-/*      CALL FTYPE('MOVING 2') */
-    i__1 = a_1.bignum - idiff2;
-    move_(&idiff2, &i__1, &a_1.maxint);
-L24:
-    if (idiff1 <= 0) {
-	goto L30;
+    idiff3 = a_1.bignum - bigold;
+    if (idiff1 != 0 || idiff2 != 0 || idiff3 != 0) {
+	move_(nfrepo, nfreto, &bigold, numado, &idiff1, &idiff3);
     }
-/*      CALL FTYPE('MOVING 3') */
-    i__1 = a_1.nfreep - idiff1;
-    i__2 = a_1.bignum - idiff1;
-    move_(&idiff1, &i__1, &i__2);
 
 /*     MAKE FREE LIST */
 
-L30:
+/* L30: */
     max__ = a_1.nfreep;
     a_1.nfreep = b_1.nil;
     i__1 = a_1.nfreeb;
@@ -1646,8 +1764,8 @@ L91:
     extern /* Subroutine */ int dmpou2_(integer *, integer *, integer *, 
 	    integer *);
 #define jpname  ((integer *) b_1.pname)   /* ((integer *)&b_1 + 1122)  */
-    static integer inreal;
-    extern /* Subroutine */ int dmpout_(integer *, integer *, integer *, 
+    static integer inreal, trail[2];
+    extern /* Subroutine */ int dmpout_(integer *, integer *, integer *,
 	    integer *), rew_(integer *);
 
 /* OMMON AND INTEGER DECLARATIONS */
@@ -1678,6 +1796,10 @@ L91:
     dmpou2_(lun, carcdr_1.cdr, &i__1, &a_1.nfreet);
     dmpout_(lun, bcom, &c__1, &a_1.nchtyp);
     dmpou2_(lun, carcdr_1.chtab, &c__1, &a_1.nbytes);
+/*             TRAILER: NATOM, SO THAT ROLLIN CAN RECOVER BIGNUM EXACTLY. */
+    trail[0] = ROLLMAGIC;
+    trail[1] = a_1.natom;
+    dmpout_(lun, trail, &c__1, &c__2);
     rew_(lun);
     return 0;
 } /* rollou_ */
@@ -1688,7 +1810,55 @@ L91:
 #undef area
 
 
-/* Subroutine */ int move_(integer *diff, integer *min__, integer *max__)
+/*             THE THREE REGIONS ABOVE THE ATOM INDICES, AND WHAT EACH ONE */
+/*             HAS TO BE SHIFTED BY WHEN AN IMAGE IS RELOADED INTO A */
+/*             DIFFERENTLY SIZED SYSTEM: */
+
+/*               CONS CELLS  (NFREPO, NFRETO]  + IDIFF1 = NFREET - NFRETO */
+/*               FLOATS      (NFRETO, BIGOLD]  + IDIFF3 = BIGNUM - BIGOLD */
+/*               SMALL INTS  (BIGOLD, MAXINT]  RE-ENCODED AROUND NUMADD */
+
+/*             THE ORIGINAL CODE MADE TWO PASSES, BOTH WITH RANGES DERIVED */
+/*             FROM THE *NEW* BIGNUM, AND SHIFTED THE FLOATS BY THE CELL */
+/*             OFFSET.  THAT IS RIGHT ONLY WHILE NATOM IS UNCHANGED: A */
+/*             DIFFERENT -A MOVED EVERY FLOAT TO THE WRONG PRINT-NAME SLOT, */
+/*             AND A DIFFERENT -C LEFT THE MOST NEGATIVE SMALL INTEGERS */
+/*             BEHIND, WHERE THEY READ BACK AS CONS CELLS.  ONE PASS THAT */
+/*             CLASSIFIES A VALUE BEFORE TOUCHING IT CANNOT RELOCATE */
+/*             ANYTHING TWICE, WHATEVER THE THREE SHIFTS ARE. */
+
+static integer reloc_(integer v, integer nfrepo, integer nfreto,
+	integer bigold, integer numado, integer idiff1, integer idiff3)
+{
+    integer n;
+
+    if (v > bigold) {
+/*                                      SMALL INTEGER.  DECODE WITH THE OLD */
+/*                                      NUMADD AND RE-ENCODE WITH THE NEW; A */
+/*                                      VALUE THE NEW SYSTEM CANNOT HOLD */
+/*                                      SATURATES INSTEAD OF WRAPPING. */
+	n = v - numado;
+	if (n > a_1.ismall) {
+	    n = a_1.ismall;
+	}
+	if (n < -a_1.ismall) {
+	    n = -a_1.ismall;
+	}
+	return n + a_1.numadd;
+    }
+    if (v > nfreto) {
+	return v + idiff3;
+    }
+    if (v > nfrepo) {
+	return v + idiff1;
+    }
+/*                                      NIL, AN ATOM, OR A FREE CELL THAT */
+/*                                      WAS NOT WRITTEN OUT: UNCHANGED. */
+    return v;
+} /* reloc_ */
+
+/* Subroutine */ int move_(integer *nfrepo, integer *nfreto, integer *bigold,
+	integer *numado, integer *idiff1, integer *idiff3)
 {
     /* System generated locals */
     integer i__1, i__2;
@@ -1696,31 +1866,26 @@ L91:
     /* Local variables */
 #define args  ((integer *)&b_1.arg)  /* ((integer *)&b_1)  */
 #define jpname ((integer *) b_1.pname)   /*  ((integer *)&b_1 + 1122)  */
-    extern /* Subroutine */ int arrutl_(integer *, integer *, integer *, 
+    extern /* Subroutine */ int arrutl_(integer *, integer *, integer *,
 	    integer *, integer *);
     static integer i__, j, i1, i2, ind1, len;
 
 /* OMMON AND INTEGER DECLARATIONS */
 /* OMMON AND INTEGER DECLARATIONS END */
 
-/*             USED BY ROLLIN TO ADD DIFF TO POINTERS POINTING */
-/*             IN (.GT.MIN , .LE.MAX) */
+/*             USED BY ROLLIN TO RELOCATE EVERY STORED LISP VALUE. */
     i1 = b_1.nil;
     i2 = a_1.natomp;
     for (j = 1; j <= 2 || j == 1; ++j) {
 	i__1 = i1;
 	i__2 = i2;
 	for (i__ = i__1; i__ <= i__2 || i__ == i__1; ++i__) {
-/* *SETC*      IF(CAR(I).GT.MIN.AND.CAR(I).LE.MAX) CALL SETCAR(I,CAR(I)+DIFF) */
-	    if (carcdr_1.car[i__ - 1] > *min__ && carcdr_1.car[i__ - 1] <= *
-		    max__) {
-		carcdr_1.car[i__ - 1] += *diff;
-	    }
-/* *SETC*      IF(CDR(I).GT.MIN.AND.CDR(I).LE.MAX) CALL SETCDR(I,CDR(I)+DIFF) */
-	    if (carcdr_1.cdr[i__ - 1] > *min__ && carcdr_1.cdr[i__ - 1] <= *
-		    max__) {
-		carcdr_1.cdr[i__ - 1] += *diff;
-	    }
+/* *SETC*      CALL SETCAR(I, RELOC(CAR(I))) */
+	    carcdr_1.car[i__ - 1] = reloc_(carcdr_1.car[i__ - 1], *nfrepo,
+		    *nfreto, *bigold, *numado, *idiff1, *idiff3);
+/* *SETC*      CALL SETCDR(I, RELOC(CDR(I))) */
+	    carcdr_1.cdr[i__ - 1] = reloc_(carcdr_1.cdr[i__ - 1], *nfrepo,
+		    *nfreto, *bigold, *numado, *idiff1, *idiff3);
 /* L10: */
 	}
 	i1 = a_1.nfreep;
@@ -1743,16 +1908,14 @@ L91:
 /*                                      IND1/LEN DRIVE THE LOOP BELOW */
 	arrutl_(&i__, &c__3, &c__1, &ind1, &len);
 	for (; len >= 1; --len, ++ind1) {
-	    if (jpname[ind1 - 1] > *min__ && jpname[ind1 - 1] <= *max__) {
-		jpname[ind1 - 1] += *diff;
-	    }
+	    jpname[ind1 - 1] = reloc_(jpname[ind1 - 1], *nfrepo, *nfreto,
+		    *bigold, *numado, *idiff1, *idiff3);
 	}
     }
     i__2 = b_1.nargs;
     for (i__ = 1; i__ <= i__2 || i__ == 1; ++i__) {
-	if (args[i__ - 1] > *min__ && args[i__ - 1] <= *max__) {
-	    args[i__ - 1] += *diff;
-	}
+	args[i__ - 1] = reloc_(args[i__ - 1], *nfrepo, *nfreto, *bigold,
+		*numado, *idiff1, *idiff3);
 /* L50: */
     }
     return 0;
@@ -2086,6 +2249,14 @@ L3010:
 /*                                      PROG--LABEL */
     terpri_();
     b_1.prtpos = b_1.lmarg - 5;
+/*   E14: a PROG label is outdented five columns from the form's left       */
+/*   margin, which is normally column 7 or more.  With a narrow right       */
+/*   margin L5120 never moves LMARG past "one past the open paren", so      */
+/*   PRTPOS went to -3 and the write landed in RDBUFF.  PRINAT's own        */
+/*   overflow handler uses exactly this clamp at L915.                      */
+    if (b_1.prtpos < 1) {
+	b_1.prtpos = 1;
+    }
     goto L3040;
 /*                                      NOT PROG. */
 L3020:
@@ -2326,6 +2497,15 @@ L5210:
     }
     i__1 = *nkw;
     for (i__ = 1; i__ <= i__1 || i__ == 1; ++i__) {
+/*   E1: the quote count is the nesting depth of the datum and has no  */
+/*   ceiling, so wrap onto a continuation line rather than running off */
+/*   the end of PRBUFF.  OLDPOS/CLEAR are re-established because       */
+/*   TERPRI has flushed and blanked everything left of PRTPOS.         */
+	if (b_1.prtpos > b_1.marg) {
+	    terpri_();
+	    clear = TRUE_;
+	    oldpos = b_1.prtpos;
+	}
 	b_1.prbuff[b_1.prtpos - 1] = chars_1.iqchr;
 /* L100: */
 	++b_1.prtpos;
@@ -3206,6 +3386,14 @@ L4500:
     if (r__ == 0.f) {
 	goto L6000;
     }
+/*   E16: SUM(3) accumulates the exponent digits as a DOUBLEREAL, so a      */
+/*   20-digit exponent gives 1e20.  Converting that to INTEGER is undefined */
+/*   behaviour, and negating the INT_MIN x86 in fact produces is undefined  */
+/*   again.  IPOWER is 50 and the two clamps below already bound IE, so     */
+/*   clamping first changes no accepted result.                             */
+    if (sum[2] > (doublereal) a_1.ipower) {
+	sum[2] = (doublereal) a_1.ipower;
+    }
     ie = isign3 * (integer) sum[2];
     if (ie > a_1.ipower - idigs) {
 	ie = a_1.ipower - idigs;
@@ -3356,6 +3544,10 @@ L1200:
     return 0;
 /*                                      E-O-FILE */
 L1300:
+    if (sysgen && b_1.lunin == b_1.lunsys) {
+	fprintf(stderr, "SYSATOMS ended in the middle of the atom table.\n");
+	exit(1);
+    }
     if (b_1.lunin != b_1.lunins) {
 	goto L1350;
     }
@@ -3408,7 +3600,7 @@ integer garb_(integer *gbctyp)
     extern /* Subroutine */ int mess_(integer *);
     static integer itop, isum, i__, j, n, s;
     extern /* Subroutine */ int markl_(integer *, integer *, integer *),
-	    lispf4_(integer *);
+	    lispf4_(integer *), lspex_(void);
     static integer jb, is;
 #define jpname  ((integer *) b_1.pname)   /* ((integer *)&b_1 + 1122)  */
 #define ipname  ((integer *) b_1.pname)   /* ((integer *)&b_1 + 1122)   */
@@ -4110,7 +4302,17 @@ L801:
 /* L8011: */
     mess_(&c__36);
 /* ----- !!!! ----- */
-    lispf4_(&c__2);
+/*             E17: JUMP TO THE RESET POINT INSTEAD OF CALLING LISPF4 AGAIN. */
+/*             THE CALL NEVER RETURNED, SO EVERY LIST-SPACE EXHAUSTION LEFT */
+/*             ANOTHER CONS -> GARB -> LISPF4 CHAIN ON THE C STACK -- ALONG */
+/*             WITH THIS FRAME'S 640-BYTE SAV_PRBUFF -- FOR THE REST OF THE */
+/*             SESSION.  IF LISPF4 HAS NOT BEEN ENTERED YET (GARB CAN RUN */
+/*             FROM INIT2) THE ONLY THING LEFT IS THE DOCUMENTED ALTERNATIVE, */
+/*             WHICH IS TO EXIT. */
+    if (f4_reset_ready) {
+	longjmp(f4_reset, 1);
+    }
+    lspex_();
 
 /* NOTE!  WE ARE NOT INTERESTED OF A RECURSIVE CALL TO LISPF4, */
 /*        BUT JUST TO PERFORM A QUICK JUMP TO THE RESET ADDRESS. */
@@ -4638,10 +4840,12 @@ integer getcht_(integer *ic)
 /*     I = IC/CHDIV+1 */
 /* OMMON AND INTEGER DECLARATIONS */
 /* OMMON AND INTEGER DECLARATIONS END */
-    i__ = *ic % 256 + 1;
-    if (*ic < 0) {
-	i__ = a_1.nbytes + i__ - 1;
-    }
+/*   E19: C's % gives a negative remainder for a negative left operand, so  */
+/*   IC = -1 gave I = 0 and then 255, indexing character 254 rather than    */
+/*   255.  GETCHT and SETCHT were consistently wrong, so they agreed with   */
+/*   each other and nothing in the current code presents a negative         */
+/*   character; corrected so a future caller that does gets the right slot. */
+    i__ = (*ic % 256 + 256) % 256 + 1;
     ret_val = carcdr_1.chtab[i__ - 1];
     return ret_val;
 } /* getcht_ */
@@ -4655,10 +4859,12 @@ integer getcht_(integer *ic)
 /* OMMON AND INTEGER DECLARATIONS */
 /* OMMON AND INTEGER DECLARATIONS END */
 /*      I = IC/CHDIV+1 */
-    i__ = *ic % 256 + 1;
-    if (*ic < 0) {
-	i__ = a_1.nbytes + i__ - 1;
-    }
+/*   E19: C's % gives a negative remainder for a negative left operand, so  */
+/*   IC = -1 gave I = 0 and then 255, indexing character 254 rather than    */
+/*   255.  GETCHT and SETCHT were consistently wrong, so they agreed with   */
+/*   each other and nothing in the current code presents a negative         */
+/*   character; corrected so a future caller that does gets the right slot. */
+    i__ = (*ic % 256 + 256) % 256 + 1;
     carcdr_1.chtab[i__ - 1] = *it;
     ich[*it - 1] = *ic;
     return 0;
@@ -4800,7 +5006,9 @@ L10:
     i3 = i2;
     i__1 = a_1.maxmes;
     for (k = 1; k <= i__1 || k == 1; ++k) {
-	rda4_(&b_1.lunsys, b_1.imess, &i1, &i2);
+	if (rda4_(&b_1.lunsys, b_1.imess, &i1, &i2) != 0) {
+	    return 1;
+	}
 	i1 += i3;
 /* L20: */
 	i2 += i3;
@@ -4895,7 +5103,13 @@ L10:
     i__1 = *i1;
     i__2 = *i2;
     for (i__ = i__1; i__ <= i__2 || i__ == i__1; ++i__) {
-	f4_read(*lun, (char *)&card[i__], 4);
+/*             E15: A SHORT READ INSIDE A RECORD JUST BLANK-FILLS, BUT A */
+/*             FAILURE ON THE FIRST WORD MEANS THE FILE RAN OUT OF LINES. */
+/*             REPORT THAT SO SYSTEM GENERATION CAN STOP INSTEAD OF */
+/*             BUILDING A HALF-FILLED MESSAGE TABLE. */
+	if (f4_read(*lun, (char *)&card[i__], 4) != 0 && i__ == i__1) {
+	    return 1;
+	}
     }
 #endif
     return 0;

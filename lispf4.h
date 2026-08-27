@@ -11,6 +11,7 @@
 #define LISPF4_H
 
 #include <signal.h>		/*  sig_atomic_t, for the break flag below  */
+#include <setjmp.h>		/*  jmp_buf, for the reset jump below  */
 #include "f2c.h"
 
 /*  Character packing.
@@ -65,5 +66,15 @@ int	mdate_(integer *it);
  *  B/IBREAK and B/ERRTYP directly.
  */
 extern volatile sig_atomic_t f4_break_pending;
+
+/*  The interpreter's reset point, armed at the top of LISPF4 and jumped to
+    by GARB when list space is exhausted.  GARB used to reach the reset label
+    by CALLING LISPF4 again -- which never returns, so every exhaustion left
+    one more CONS -> GARB -> LISPF4 chain on the C stack for the rest of the
+    session.  F4_RESET_READY says whether the jump target is live: GARB can
+    also run from INIT2, before LISPF4 has been entered at all.  */
+
+extern jmp_buf f4_reset;
+extern int     f4_reset_ready;
 
 #endif	/*  LISPF4_H  */

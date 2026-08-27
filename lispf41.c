@@ -139,6 +139,9 @@ static integer c__40 = 40;
 #define n ((integer *)equiv_2)
     extern integer iread_(integer *);
     static real r__, s;
+/*   E11: the ordering predicates need a wider comparison than REAL -- see  */
+/*   L12040, L12200 and L12210.                                             */
+    static doublereal dr, ds;
     extern integer xcall_(integer *, integer *), openf_(integer *), subpr_(
 	    integer *, integer *, integer *), equal_(integer *, integer *), 
 	    getpn_(integer *, integer *, integer *, integer *), ratom_(
@@ -190,6 +193,13 @@ static integer c__40 = 40;
 /*      SPECAT(JDUMMY) = JDUMMY.EQ.STRING .OR. JDUMMY.EQ.SUBSTR */
 /*     * .OR. JDUMMY.EQ.ARRAY */
 /* L2: */
+/*   E17: arm the reset point GARB jumps to when list space is exhausted.   */
+/*   Every local in this routine is declared static (F2C's habit), so none  */
+/*   of them is clobbered by the jump, and L1 assigns everything it needs.  */
+    if (setjmp(f4_reset) != 0) {
+	goto L1;
+    }
+    f4_reset_ready = 1;
     switch (*iree) {
 	case 1:  goto L10;
 	case 2:  goto L1;
@@ -446,14 +456,25 @@ L1671:
 
 /* THE FOLLOWING CODE IS FOR AVOIDING CALLS TO GET FOR TESTING IF */
 /* THERE IS ANY FUNCTION DEFINITION STORED UNDER THE FNCELL PROPERTY */
+/*   E5: this is a hand-inlined copy of GET with none of GET's checks, and  */
+/*   an atom's property list is writable from Lisp -- (RPLACD 'ZZ 5) is     */
+/*   enough to make every dereference below wild.  Fall back to the real    */
+/*   GET, which now answers NIL for a malformed plist.                      */
     ll = carcdr_1.cdr[l - 1];
     if (ll == b_1.nil) {
 	goto L1676;
     }
+    if (ll <= a_1.natom || ll > a_1.nfreet) {
+	goto L1677;
+    }
     if (carcdr_1.car[ll - 1] != b_1.fncell) {
 	goto L1677;
     }
-    ll = carcdr_1.car[carcdr_1.cdr[ll - 1] - 1];
+    ll = carcdr_1.cdr[ll - 1];
+    if (ll <= a_1.natom || ll > a_1.nfreet) {
+	goto L1677;
+    }
+    ll = carcdr_1.car[ll - 1];
     goto L1720;
 L1677:
     ll = get_(&l, &b_1.fncell);
@@ -664,7 +685,13 @@ L1731:
 
 /* L1750: */
     icdr = carcdr_1.cdr[ll - 1];
-    icar = carcdr_1.car[icdr - 1];
+/*   E8: (LAMBDA . 5) has no lambda list at all.  Treat it as empty; the  */
+/*   body lookup at L1788 then rejects the definition properly.          */
+    if (icdr <= a_1.natom || icdr > a_1.nfreet) {
+	icar = b_1.nil;
+    } else {
+	icar = carcdr_1.car[icdr - 1];
+    }
 /*                                      ! ICAR IS THEN (X Y) */
 L1760:
     if (icar <= a_1.natom || icar > a_1.nfreet) {
@@ -678,8 +705,18 @@ L1760:
     }
     ++jaan_1.tops;
     jaan_1.jack[jaan_1.tops - 1] = carcdr_1.car[icar - 1];
-    jaan_1.jill[jaan_1.tops - 1] = carcdr_1.car[b_1.arg2 - 1];
-    b_1.arg2 = carcdr_1.cdr[b_1.arg2 - 1];
+/*   E8: the loop is written to tolerate a SHORT argument list -- CAR(NIL) */
+/*   and CDR(NIL) are both NIL, so a missing argument binds to NIL -- but  */
+/*   it tested ICAR and then dereferenced ARG2.  A DOTTED argument list,   */
+/*   ((LAMBDA (X) X) . 5), was a wild read.  The two sibling loops, L1690  */
+/*   and L1771, already test the variable they dereference.               */
+    if (b_1.arg2 <= a_1.natom || b_1.arg2 > a_1.nfreet) {
+	jaan_1.jill[jaan_1.tops - 1] = b_1.nil;
+	b_1.arg2 = b_1.nil;
+    } else {
+	jaan_1.jill[jaan_1.tops - 1] = carcdr_1.car[b_1.arg2 - 1];
+	b_1.arg2 = carcdr_1.cdr[b_1.arg2 - 1];
+    }
     icar = carcdr_1.cdr[icar - 1];
     goto L1760;
 
@@ -777,8 +814,14 @@ L1785:
     b_1.form = jaan_1.jill[index];
     l = carcdr_1.car[b_1.form - 1];
 L1776:
-    if (l <= a_1.natom || l > a_1.nfreet) {
+    if (l <= a_1.natom) {
 	goto L1786;
+    }
+/*   E5: the function is looked up again AFTER the arguments have run, so a */
+/*   form that rewrote itself while they ran arrives here with L no longer  */
+/*   the atom it was.  A number is not applicable: FAULTAPPLY it.           */
+    if (l > a_1.nfreet) {
+	goto L2230;
     }
     ll = l;
     b_1.temp1 = carcdr_1.car[l - 1];
@@ -786,21 +829,38 @@ L1776:
 	goto L1788;
     }
     b_1.temp1 = carcdr_1.cdr[l - 1];
+    if (b_1.temp1 <= a_1.natom || b_1.temp1 > a_1.nfreet) {
+	goto L2230;
+    }
     l = carcdr_1.car[b_1.temp1 - 1];
     goto L1776;
 /* THE FOLLOWING CODE IS FOR AVOIDING CALLS TO GET */
 L1786:
+/*   E5: the original comment here read "ASSUME THAT THERE IS ALWAYS A      */
+/*   PROPERTY LIST", which is exactly the assumption RPLACD lets you break. */
     ll = carcdr_1.cdr[l - 1];
-/* ASSUME THAT THERE IS ALWAYS A PROPERTY LIST */
+    if (ll <= a_1.natom || ll > a_1.nfreet) {
+	goto L1787;
+    }
     if (carcdr_1.car[ll - 1] != b_1.fncell) {
 	goto L1787;
     }
-    ll = carcdr_1.car[carcdr_1.cdr[ll - 1] - 1];
+    ll = carcdr_1.cdr[ll - 1];
+    if (ll <= a_1.natom || ll > a_1.nfreet) {
+	goto L1787;
+    }
+    ll = carcdr_1.car[ll - 1];
     goto L1788;
 L1787:
     ll = get_(&l, &b_1.fncell);
 L1788:
+    if (ll <= a_1.natom || ll > a_1.nfreet) {
+	goto L2230;
+    }
     b_1.arg = carcdr_1.cdr[ll - 1];
+    if (b_1.arg <= a_1.natom || b_1.arg > a_1.nfreet) {
+	goto L2230;
+    }
     b_1.arg = carcdr_1.cdr[b_1.arg - 1];
 
 /*           NOW ITS TIME TO CALL EVLAST WITH THE FUNCTION BODY */
@@ -891,14 +951,18 @@ L1815:
 /*              THIS CODE MUST BE REWRITEN IT WORKS BUT !! */
 L1818:
     b_1.temp1 = carcdr_1.cdr[ll - 1];
+/*   E13: the second of the two identical tests that used to stand here was */
+/*   dead -- TEMP1 had already been replaced by NIL if it was bad -- so the */
+/*   check meant to protect the second CDR protected nothing.  L2250 is the */
+/*   existing "--- Faulty funarg block" path.                               */
     if (b_1.temp1 <= a_1.natom || b_1.temp1 > a_1.nfreet) {
-	b_1.temp1 = b_1.nil;
+	goto L2250;
     }
     l = carcdr_1.car[b_1.temp1 - 1];
-    if (b_1.temp1 <= a_1.natom || b_1.temp1 > a_1.nfreet) {
-	b_1.temp1 = b_1.nil;
-    }
     b_1.temp1 = carcdr_1.cdr[b_1.temp1 - 1];
+    if (b_1.temp1 <= a_1.natom || b_1.temp1 > a_1.nfreet) {
+	goto L2250;
+    }
     b_1.temp2 = carcdr_1.car[b_1.temp1 - 1];
 /* L1820: */
     iprev = jaan_1.tops;
@@ -907,6 +971,11 @@ L1818:
 /*      JILL(TOPS)=TEMP1 !! THIS LINE CHANGED TO BELOW LINE, 20 OCTOBER 84 */
     jaan_1.jill[jaan_1.tops - 1] = ll;
 L1821:
+/*   E13: TEMP2 walks the funarg block's a-list; a hand-built or LOADed  */
+/*   block can end it with anything.                                     */
+    if (b_1.temp2 <= a_1.natom || b_1.temp2 > a_1.nfreet) {
+	goto L1822;
+    }
     b_1.temp3 = carcdr_1.car[b_1.temp2 - 1];
     if (b_1.temp3 <= a_1.natom || b_1.temp3 > a_1.nfreet) {
 	goto L1822;
@@ -2051,13 +2120,24 @@ L12040:
     }
     r__ = gtreal_(&b_1.arg, &i__);
     s = gtreal_(&b_1.arg2, &j);
-    if (r__ == 0.f) {
-	r__ = (real) i__;
+/*   E11: REAL is a 24-bit-mantissa single, while small integers run to     */
+/*   ISMALL = 1073690323.  Converting both operands to REAL collapsed every */
+/*   pair differing below the 2**24 granule, so the ordering predicates     */
+/*   were wrong over most of the integer range -- and disagreed with EQUAL, */
+/*   which has always compared integers exactly.  GTREAL returns 0.0 for a  */
+/*   small integer and leaves the value in IRETUR, so "both 0.0" is the     */
+/*   integer case; the mixed case goes through DOUBLEREAL, which holds      */
+/*   every SMALLNUM exactly.                                                */
+    if (r__ == 0.f && s == 0.f) {
+	if (i__ <= j) {
+	    goto L3100;
+	} else {
+	    goto L3090;
+	}
     }
-    if (s == 0.f) {
-	s = (real) j;
-    }
-    if (r__ - s <= 0.f) {
+    dr = r__ == 0.f ? (doublereal) i__ : (doublereal) r__;
+    ds = s == 0.f ? (doublereal) j : (doublereal) s;
+    if (dr - ds <= 0.) {
 	goto L3100;
     } else {
 	goto L3090;
@@ -2243,6 +2323,13 @@ L12150:
 /* EVSTK */
 L12160:
     iprev = jaan_1.tops;
+/*   E7: GETNUM assumes a number.  For anything at or below BIGNUM it calls  */
+/*   GTREAL, which indexes PNAME at I+DPNAME -- for NIL that is ~400 KB      */
+/*   below the allocation.  The frame-index range test below is right, it    */
+/*   just runs one line too late.                                           */
+    if (b_1.arg2 <= a_1.nfreet) {
+	goto L25035;
+    }
     b_1.temp1 = getnum_(&b_1.arg2);
     if (b_1.temp1 < 0 || b_1.temp1 > jaan_1.tops || (b_1.temp1 != 0 && jaan_1.jack[
 	    b_1.temp1 - 1] > 0)) {
@@ -2277,13 +2364,17 @@ L12200:
     }
     r__ = gtreal_(&b_1.arg, &i__);
     s = gtreal_(&b_1.arg2, &j);
-    if (r__ == 0.f) {
-	r__ = (real) i__;
+/*   E11: exact integer comparison, double for the mixed case.  See L12040. */
+    if (r__ == 0.f && s == 0.f) {
+	if (i__ <= j) {
+	    goto L3090;
+	} else {
+	    goto L3100;
+	}
     }
-    if (s == 0.f) {
-	s = (real) j;
-    }
-    if (r__ - s <= 0.f) {
+    dr = r__ == 0.f ? (doublereal) i__ : (doublereal) r__;
+    ds = s == 0.f ? (doublereal) j : (doublereal) s;
+    if (dr - ds <= 0.) {
 	goto L3090;
     } else {
 	goto L3100;
@@ -2321,13 +2412,17 @@ L12210:
     }
     r__ = gtreal_(&b_1.arg, &i__);
     s = gtreal_(&b_1.arg2, &j);
-    if (r__ == 0.f) {
-	r__ = (real) i__;
+/*   E11: exact integer comparison, double for the mixed case.  See L12040. */
+    if (r__ == 0.f && s == 0.f) {
+	if (i__ >= j) {
+	    goto L3090;
+	} else {
+	    goto L3100;
+	}
     }
-    if (s == 0.f) {
-	s = (real) j;
-    }
-    if (r__ - s >= 0.f) {
+    dr = r__ == 0.f ? (doublereal) i__ : (doublereal) r__;
+    ds = s == 0.f ? (doublereal) j : (doublereal) s;
+    if (dr - ds >= 0.) {
 	goto L3090;
     } else {
 	goto L3100;
@@ -2751,6 +2846,13 @@ L12655:
 	goto L12659;
     }
     b_1.temp1 = carcdr_1.car[b_1.arg2 - 1];
+/*   E6: the spine is checked, the element is not.  InterLisp ignores a     */
+/*   non-pair entry in an a-list; walking into it reads wild memory, and    */
+/*   here it would then be handed to EQUAL as a structure.                  */
+    if (b_1.temp1 <= a_1.natom || b_1.temp1 > a_1.nfreet) {
+	b_1.arg2 = carcdr_1.cdr[b_1.arg2 - 1];
+	goto L12655;
+    }
     if41 = carcdr_1.car[b_1.temp1 - 1];
     if (equal_(&b_1.arg, &if41) != b_1.nil) {
 	goto L12658;
@@ -2833,6 +2935,11 @@ L12715:
 	goto L12719;
     }
     b_1.temp1 = carcdr_1.car[b_1.arg2 - 1];
+/*   E6: skip a non-pair a-list entry rather than walking into it.  */
+    if (b_1.temp1 <= a_1.natom || b_1.temp1 > a_1.nfreet) {
+	b_1.arg2 = carcdr_1.cdr[b_1.arg2 - 1];
+	goto L12715;
+    }
     if (b_1.arg == carcdr_1.car[b_1.temp1 - 1]) {
 	goto L12718;
     }
@@ -3064,6 +3171,10 @@ L15010:
 /*  APPLYSTK */
 L15012:
     iprev = jaan_1.tops;
+/*   E7: as at L12160 -- validate before handing the value to GETNUM.  */
+    if (b_1.arg3 <= a_1.nfreet) {
+	goto L25036;
+    }
     b_1.temp1 = getnum_(&b_1.arg3);
     if (b_1.temp1 < 0 || b_1.temp1 > jaan_1.tops || (b_1.temp1 != 0 && jaan_1.jack[
 	    b_1.temp1 - 1] > 0)) {
@@ -3176,6 +3287,12 @@ L15050:
 L15060:
     b_1.temp1 = i__;
     i__ = carcdr_1.cdr[b_1.temp1 - 1];
+/*   E2: I is the value cell of this property.  In a malformed plist -- */
+/*   (BAR . 5) say -- it is a number, and the SETCAR below would then    */
+/*   store a caller-chosen value at a caller-chosen offset from CAR.     */
+    if (i__ <= a_1.natom || i__ > a_1.nfreet) {
+	goto L25030;
+    }
     if (carcdr_1.car[b_1.temp1 - 1] != b_1.arg2) {
 	goto L15080;
     }
@@ -3761,6 +3878,12 @@ L18210:
     b_1.arg2 = carcdr_1.cdr[b_1.form - 1];
 L18220:
     b_1.arg2 = carcdr_1.cdr[b_1.arg2 - 1];
+/*   E10: D4 guarded the FSUBR entry at L18200, which covers (SELECTQ . 5), */
+/*   but this interior walk runs after the key has been evaluated and kept  */
+/*   none of it.  A dotted tail anywhere in the clause list reaches here.   */
+    if (b_1.arg2 <= a_1.natom || b_1.arg2 > a_1.nfreet) {
+	goto L25080;
+    }
     if (carcdr_1.cdr[b_1.arg2 - 1] == b_1.nil) {
 	goto L18280;
     }
@@ -3882,7 +4005,14 @@ L20070:
     ++jaan_1.tops;
     jaan_1.jack[jaan_1.tops - 1] = carcdr_1.car[b_1.temp1 - 1];
     b_1.temp2 = carcdr_1.cdr[b_1.temp1 - 1];
-    jaan_1.jill[jaan_1.tops - 1] = carcdr_1.car[b_1.temp2 - 1];
+/*   E9: (PROG ((X 1)) ...) and (PROG (X) ...) were both handled; the shape */
+/*   a typo produces, (PROG ((X . 5)) ...), was a wild read.  Bind such a   */
+/*   variable to NIL, as the plain (X) form does.                           */
+    if (b_1.temp2 <= a_1.natom || b_1.temp2 > a_1.nfreet) {
+	jaan_1.jill[jaan_1.tops - 1] = b_1.nil;
+    } else {
+	jaan_1.jill[jaan_1.tops - 1] = carcdr_1.car[b_1.temp2 - 1];
+    }
     goto L20091;
 L20090:
     if (TOPS_FULL()) {

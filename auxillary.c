@@ -115,7 +115,21 @@ static	int	read1(FILE *fp, int lun)
 	int	c;
 	if (read_status[lun] == 1) {
 		c = getc(fp);
-		if (c == '\r'  ||  c == '\n') {
+		if (c == '\r') {
+			/*  A CRLF file is one line per CRLF, not one real
+			    line and one blank.  Treating the CR as the
+			    terminator and leaving the LF for the next
+			    f4_start_read made every second line read as
+			    blank: IREAD tolerates that, but MESS's RDA4
+			    reads exactly MAXMES lines, so a CRLF SYSATOMS
+			    silently built an image with a shifted message
+			    table.  */
+			int n = getc(fp);
+			if (n != '\n'  &&  n != EOF)
+				ungetc(n, fp);
+			read_status[lun] = 2;
+			c = ' ';
+		} else if (c == '\n') {
 			read_status[lun] = 2;
 			c = ' ';
 		} else if (c == EOF  &&  (ferror(fp)  ||  feof(fp))) {

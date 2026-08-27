@@ -1,0 +1,26 @@
+READY
+T
+78
+(PROG
+  (A B)
+L1
+  (SETQ A B)
+  (GO L1))(PROG
+            (A B)
+       L1   (SETQ A B)
+            (GO L1))
+30
+(PROG
+  (A B)
+L1
+  (SETQ A
+    B)
+  (GO L1))
+(PROG
+  (A B)
+L1
+  (SETQ A
+    B)
+  (GO L1))
+10
+7
