@@ -153,6 +153,9 @@ static integer c__40 = 40;
     extern /* Subroutine */ int fpush_(integer *);
     static integer local, iprev, iargs, k1;
     extern /* Subroutine */ int shift_(integer *);
+/*   K1: NON-ZERO WHILE AN UNREAD CHARACTER OF THE CURRENT INPUT LINE IS     */
+/*   STILL IN RDBUFF.  DEFINED BESIDE RDA1 IN LISPF42.                       */
+    extern integer rdpend_(void);
     extern integer matom_(integer *);
     extern /* Subroutine */ int eject_(integer *), lspex_(void);
     extern integer mslft_(integer *);
@@ -184,6 +187,9 @@ static integer c__40 = 40;
     static integer nfunarg;
     extern /* Subroutine */ int rew_(integer *);
     static integer ist, ipl2;
+/*   K6: THE FULL VALUES OF HILLW AND MIDDL FOR THIS CONFIGURATION.  25090   */
+/*   AND 25095 SPEND THEM TO GET AN OVERFLOW REPORTED; 999 PUTS THEM BACK.   */
+    static integer hillw0, middl0;
 
 /* OMMON AND INTEGER DECLARATIONS */
 /* OMMON AND INTEGER DECLARATIONS END */
@@ -268,6 +274,8 @@ L1:
 	jaan_1.hillw = 1;
     }
     b_1.middl = a_1.nstack / 10;
+    hillw0 = jaan_1.hillw;
+    middl0 = b_1.middl;
     b_1.isplft = 400;
     b_1.ibreak = FALSE_;
     b_1.arg = b_1.lispx;
@@ -306,6 +314,22 @@ L998:
 L999:
     i__ = b_1.stack[b_1.ip - 1];
     --b_1.ip;
+/*   K6: 25095 AND 25090 BORROW FROM THE MARGIN THAT KEEPS SYSERROR RUNNABLE */
+/*   -- HILLW MOVES UP BY 65 AND MIDDL HALVES -- SO THAT AN OVERFLOW CAN BE  */
+/*   REPORTED AT ALL.  NOTHING PUT THEM BACK EXCEPT L1, THE RESET, SO THE    */
+/*   ALLOWANCE WAS SPENT PER SESSION RATHER THAN PER INCIDENT: THE FIRST TWO */
+/*   CAUGHT PARAMETER-STACK OVERFLOWS RETURNED CLEANLY AND THE THIRD KILLED  */
+/*   THE COMPUTATION -- "--- FATAL PARAMETERSTACK OVERFLOW" AND A RESET THAT */
+/*   THREW AWAY ANY ENCLOSING PROG, ERRORSET, LOAD OR READFILE.  HAND THEM   */
+/*   BACK HERE, AS SOON AS THE STACK EACH ONE GUARDS HAS ACTUALLY DRAINED,   */
+/*   SO A PROGRAM THAT PROBES RECURSION DEPTH WITH NLSETQ IN A LOOP KEEPS    */
+/*   WORKING WITHOUT HAVING TO RETURN TO TOP LEVEL FIRST.                    */
+    if (jaan_1.hillw > hillw0 && jaan_1.tops < hillw0) {
+	jaan_1.hillw = hillw0;
+    }
+    if (b_1.middl < middl0 && b_1.jp - b_1.ip > middl0) {
+	b_1.middl = middl0;
+    }
 
 /* L1000: */
     switch (i__) {
@@ -370,6 +394,24 @@ L1020:
 L1477:
     fpush_(&c__19);
 L1500:
+/*                                     ! K4: APPLY HAD NO BREAK POLL AT ALL -- */
+/*                                     ! ONLY EVAL, AT 1600, DID.  MAP AND MAPC */
+/*                                     ! DRIVE THEIR SPINE WALK THROUGH HERE,   */
+/*                                     ! SO WITH A SUBR AS THE MAPPED FUNCTION  */
+/*                                     ! CONTROL NEVER REACHED EVAL AND A       */
+/*                                     ! CIRCULAR LIST MEANT KILL -9.  WITH A   */
+/*                                     ! LAMBDA THE BODY WENT THROUGH EVAL AND  */
+/*                                     ! THE INTERRUPT WORKED, WHICH IS WHY IT  */
+/*                                     ! WAS EASY TO MISS.  POLLING HERE COVERS */
+/*                                     ! EVERY APPLY-DRIVEN LOOP.              */
+    if (f4_break_pending) {
+	f4_break_pending = 0;
+	b_1.errtyp = 26;
+	b_1.ibreak = TRUE_;
+    }
+    if (b_1.ibreak) {
+	goto L2400;
+    }
     if (b_1.arg == b_1.nil) {
 	goto L999;
     }
@@ -1696,6 +1738,14 @@ L10090:
 
 L10100:
     *ires = iread_(&c__0);
+/*                                      ! K5: IREAD HANDS BOTH STACKS BACK AND */
+/*                                      ! RAISES ERRTYP 12 WHEN THE DATUM IS   */
+/*                                      ! DEEPER THAN THE A-STACK.  SURFACE IT */
+/*                                      ! HERE, THE WAY 15150 SURFACES SUBPR'S */
+/*                                      ! INTERRUPT, SO ERRORSET CAN CATCH IT. */
+    if (b_1.ibreak && b_1.errtyp == 12) {
+	goto L2400;
+    }
     goto L998;
 
 /* READP */
@@ -1703,7 +1753,13 @@ L10105:
     if (b_1.cht > 1) {
 	goto L3100;
     }
-    if (b_1.rdpos > b_1.margr) {
+/*                                      ! K1: "IS THERE ANYTHING LEFT ON THIS */
+/*                                      ! LINE" MUST ASK ABOUT THE LINE, NOT  */
+/*                                      ! ABOUT THE CARD RDA1 PADDED IT INTO; */
+/*                                      ! OTHERWISE SHIFT IS CALLED FOR       */
+/*                                      ! PADDING THAT IS NOT THERE AND READS */
+/*                                      ! A FRESH LINE, WHICH BLOCKS.         */
+    if (! rdpend_()) {
 	goto L3090;
     }
     shift_(&c__2);
@@ -2750,6 +2806,13 @@ L12470:
     i__ = 0;
     b_1.temp1 = b_1.arg;
 L12480:
+/*                                      ! K4: SEE THE NOTE AT 11256 */
+    if (f4_break_pending) {
+	f4_break_pending = 0;
+	b_1.errtyp = 26;
+	b_1.ibreak = TRUE_;
+	goto L2400;
+    }
     if (b_1.temp1 <= a_1.natom || b_1.temp1 > a_1.nfreet) {
 	goto L12490;
     }
@@ -2868,6 +2931,10 @@ L12530:
     b_1.iflg2 = b_1.nil;
     b_1.cht = n1;
     b_1.chr = n2;
+/*                                      ! K5: SEE 10100 */
+    if (b_1.ibreak && b_1.errtyp == 12) {
+	goto L2400;
+    }
     goto L12440;
 
 /* QUOTIENT */
@@ -3478,6 +3545,16 @@ L15040:
 	goto L25030;
     }
 L15050:
+/*                                      ! K4: A PROPERTY LIST IS AS EASY TO */
+/*                                      ! MAKE CIRCULAR AS ANY OTHER LIST -- */
+/*                                      ! RPLACD ON A LITERAL ATOM IS THE    */
+/*                                      ! PLIST SETTER.  SEE THE NOTE AT 11256 */
+    if (f4_break_pending) {
+	f4_break_pending = 0;
+	b_1.errtyp = 26;
+	b_1.ibreak = TRUE_;
+	goto L2400;
+    }
     i__ = carcdr_1.cdr[b_1.temp1 - 1];
     if (! (i__ <= a_1.natom || i__ > a_1.nfreet)) {
 	goto L15060;

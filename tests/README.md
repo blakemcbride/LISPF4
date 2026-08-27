@@ -38,7 +38,7 @@ Scratch output lands in `tests/.work/` (gitignored) — `NAME.out` is the raw se
 ## Expected result today
 
 ```
-passed: 89   failed: 0   known failures: 0   unexpected passes: 0
+passed: 98   failed: 0   known failures: 0   unexpected passes: 0
 ```
 
 Everything found so far is fixed, so there are no `.bug` markers left. The driver exits 0
@@ -131,6 +131,30 @@ Because of this, avoid writing cases whose output includes an atom index (an arr
   is dropped the `STOP` is never seen and `READFILE` carries on reading standard input. Note
   that a `READFILE` test file **must** end with `STOP` or the case will appear to fail for
   an unrelated reason.
+- The `k`-series covers `Bugs7.md` (K1-K9). All nine were verified to fail against
+  `Linux/lispf4` + `Linux/basic.img` -- the last shipped build -- and to pass after the fix:
+  `LISPF4=./Linux/lispf4 LISPF4_IMG=./Linux/basic.img ./tests/run-tests.sh k1- k2-` and so
+  on. K2, K3 and K7 are `.lisp`-layer defects, so they need the old *image* as well as the
+  old interpreter.
+- `k4-circint` extends `i4-circint`'s harness to `NCONC`, `NCONC1`, `MAP`, `MAPC` and to a
+  **circular property list** for `GETPROP`/`GETD`/`PUTPROP`. A ring is easy to build there
+  because `RPLACD` on a literal atom is the plist setter. `MAP`/`MAPC` need the mapped
+  function to be a *SUBR* (`'NULL`, not a LAMBDA): they drive their loop through `APPLY`,
+  and with a LAMBDA the body goes through `EVAL`, whose poll was always there.
+- `k5-deepread` splits its 600-level datum over 60-column lines so that K1 plays no part,
+  and asserts three things -- `--- Stack overflow` in the transcript, `(ERRORN)` = 12, and
+  no *second* `--- Reset` (the first is the startup banner's). Without the last one the
+  case would pass on a build that reset silently.
+- `k6-repeatoflo` fires both escalations: five recursions for the parameter stack
+  (`HILLW`, fatal on the third before the fix) and six `(COPY circ)` for the A-stack
+  (`MIDDL`, five incidents). It needs *no* `--- Reset` and *no* `Fatal` line, which the
+  `.exp` comparison enforces by way of the normaliser keeping later `--- Reset` lines.
+- `k7-loadfail`'s real detector is the form *after* the failing one: `(NLSETQ P2)` must
+  answer `NIL`, not `(2)`. `(2)` means the top level read the rest of the file itself,
+  which is what the abandoned `LOAD` used to leave the reader doing.
+- `h3-stralloc` changed with K8: `PROMPTTEXT` answers with a literal atom, and the case's
+  two comparisons were written against strings. They passed only because `EQUAL` compared
+  print names with no type test.
 
 ## Sanitizer status
 
@@ -138,7 +162,7 @@ Last run 2026-08-27, ASan + UBSan + `float-cast-overflow`, strict options. (GCC 
 `float-cast-overflow` out of the default `-fsanitize=undefined` set and it is what catches
 E16, so it is now in `DBGFLAGS`.) **No reports** from any of the following:
 
-- the full 89-case suite;
+- the full 98-case suite;
 - a sweep of every SUBR against 16 structurally malformed arguments and 8 malformed second
   arguments -- 12 528 forms. The same sweep finds 64 segfaults on the pre-fix binary;
 - 6 000 randomly generated nested forms over the builtin table, including dotted tails at

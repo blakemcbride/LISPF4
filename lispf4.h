@@ -34,6 +34,7 @@ int	f4_open(int lun, char *file, char *mode);
 int	f4_close(int lun);
 int	f4_isopen(int lun);
 void	f4_start_read(int lun);
+int	f4_at_line_end(int lun);
 int	f4_write_lf(int lun);
 int	f4_rewind(int lun);
 

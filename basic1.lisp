@@ -12,7 +12,16 @@
                          (RETURN))
                      (SETQ TEMP (IOTAB 1 LFN))
                 LOOP (SELECTQ (SETQ &&X (READ))
-                              (STOP (XCALL 2 LFN) (RETURN (IOTAB 1 TEMP)))
+                              (STOP (GO DONE))
                               (EVAL &&X))
-                     (GO LOOP]
+                     (GO LOOP)
+                ERRORSET
+                     (IOTAB 1 TEMP)
+                     (XCALL 2 LFN)
+                     (PRIN1 FILE)
+                     (PRIN1 " - ABANDONED")
+                     (TERPRI)
+                     (RETURN)
+                DONE (XCALL 2 LFN)
+                     (RETURN (IOTAB 1 TEMP]
 (PUTD 'PRINT '(LAMBDA (A) (PRIN0 A T) (TERPRI) A))

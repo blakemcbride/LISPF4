@@ -486,6 +486,118 @@ Deliberately **not** changed, and why -- so a later pass does not re-litigate th
 - **`SYSIN`/`SYSOUT` still take unit 30.** Neither nests inside the other, and neither
   nests inside `LOAD`, which no longer takes a fixed unit.
 
+### Eighth bug-fix pass (2026-08-27)
+
+`Bugs7.md` -- nine defects, three of which silently corrupt data on its way through a
+file.
+
+- **The reader was a card reader, and nothing said so.** `RDA1` filled `RDBUFF` from
+  `LMARGR` to `MARGR` and called that a line. A physical line *longer* than the margin was
+  simply cut -- the surplus stayed in the stream and the next call picked it up as a fresh
+  line, which `SHIFT` reports as an end-of-line, which `RATOM` reads as a token delimiter.
+  A 140-character atom sitting across column 150 therefore arrived as **two** atoms, with
+  no diagnostic and nothing in the printed form to mark the seam. A line *shorter* than
+  the margin was blank padded to it, so a string spanning a newline swallowed the padding:
+  `"abc\ndef"` came back 144 characters long. `MAKEFILE` never writes a line over 78
+  columns (I2), so the system's own files were safe -- but `LOAD` and `READFILE` are the
+  documented way to bring in text written by anything else, and `(IOTAB 4 N)` accepts at
+  most 160 because `RDBUFF` is a compile-time 160 words, so there was no setting at which
+  a 200-column line read correctly. The information needed was already in `auxillary.c`:
+  `READ_STATUS[LUN]` is 2 or 3 exactly when the line really ended and still 1 when the
+  buffer filled first, now exposed as `f4_at_line_end`. `RDA1` records both facts
+  (`RD_LINEEND`, `RD_LINECUT`) and `SHIFT` acts on them -- a cut line is *continued* rather
+  than delimited, and a short one ends where it really ends. **The card refill is now
+  lazy**: `L1200` hands over the end-of-line first and reads the next card only when a
+  character is actually asked for. That is not cosmetic. `INIT2` finishes the atom table
+  with `IREAD` and then has `MESS` read the message table *straight off `SYSATOMS`* with
+  `RDA4`; an eager refill swallows one message line and system generation fails.
+- **A display limit is not a serialisation limit.** `MAKEFILE` wrote the file with
+  `(PRINTLEVEL 150)` and `(PRINTLENGTH 1000)` in force. Past those the printer emits the
+  graphic `---` or `...` *instead of* the rest of the structure, and the package goes out
+  through that same printer -- so a 1200-element variable was written 1000 long with a
+  literal `---` for the tail, `MAKEFILE` reported "COMPLETE.", and the loss surfaced only
+  when someone reloaded the text, possibly much later. Both limits are now raised rather
+  than lowered. That is safe because `PRIN1`'s node budget is `max(PRNODES, LEVELL,
+  LEVELM)`, so raising them raises the circular-structure guard with them, and the
+  effective print level is separately clamped to the A-stack that is actually free.
+- **The one reader-special character the printer never escaped.** `SYSFLAG 5` escaping
+  covered character types 1-8 and 23 but not type 24, the rescue character `~`, in either
+  branch -- so neither in an atom nor inside a string. `SHIFT` acts on `~` wherever it
+  occurs, string literal included, so any datum containing one printed back as a
+  `--- User break` and `MAKEFILE` wrote a file `LOAD` broke on: the definition was lost and
+  everything after it in the file skipped. `%~` was always handled correctly on input, so
+  escaping type 24 on output closed the round trip.
+- **`APPLY` had no break poll; only `EVAL` did.** `MAP` and `MAPC` drive their spine walk
+  through `APPLY`, so with a SUBR as the mapped function control never reached `EVAL` and
+  a circular list meant `kill -9`. With a LAMBDA the body went through `EVAL` and the
+  interrupt worked, which is what made it easy to miss. The poll now sits at `L1500` and so
+  covers every `APPLY`-driven loop, present and future. Four more bare spine walks got the
+  standard I4 poll: `NCONC`/`NCONC1` (`L12480`), `PUTPROP` (`L15050`) and `GET`'s `L8`.
+  A **circular property list** is as easy to build as any other ring, because `RPLACD` on a
+  literal atom *is* the plist setter; E4 made `GET` tolerate a malformed plist, not
+  terminate on a circular one.
+- **`IREAD` was the last routine with I5's defect.** An over-deep datum returned with `IP`
+  where `FPUSH` left it and `JP` where `APUSH2` left it, so `L25090` could never report
+  anything: `EVAL` failed the margin test again, `MIDDL` halved five times and the session
+  reset with `--- Reset` as the entire diagnostic and nothing for `ERRORSET` to catch. It
+  now saves and restores both pointers the way `SUBPR` does, raises `ERRTYP` 12, and
+  **swallows the rest of the abandoned datum** by calling `RATOM` until `BRLEV` comes back
+  to where it started -- otherwise the tail arrives at top level as a stream of stray close
+  parentheses, one `NIL` printed each. The threshold is about 490 levels at `-s1500`
+  (`IREAD` spends three stack words per level) and scales with `-s`.
+- **A borrowed margin has to be given back.** `L25090` and `L25095` spend the margin that
+  keeps `SYSERROR` runnable -- `MIDDL` halves, `HILLW` moves up by 65 -- so that an
+  overflow can be reported at all. Nothing put them back except `L1`, the reset, so the
+  allowance was spent *per session* rather than per incident: the first two caught
+  parameter-stack overflows returned cleanly and the third was fatal and reset, throwing
+  away any enclosing `PROG`, `ERRORSET`, `LOAD` or `READFILE`. `L999` now restores each one
+  as soon as the stack it guards has actually drained, so a program that probes recursion
+  depth with `NLSETQ` in a loop keeps working without having to return to top level first.
+  Note the directions: `HILLW` is a threshold that the escalation *raises*, `MIDDL` a
+  margin that it *halves*.
+- **Cleanup that lives in one arm of a `SELECTQ` is not cleanup.** `LOAD`'s `INUNIT` and
+  `CLOSE` sat inside the `STOP` arm, so an error in a form left both undone: the load was
+  abandoned with no message, **the reader was still pointing at the file** -- the top level
+  read and evaluated the rest of it as though the user had typed it -- and the logical unit
+  leaked, which over a session of debugging a file that does not load undoes H5/J1's whole
+  point. `LOAD` now runs its loop as `(ERRORSET '(LOAD-LOOP) NIL)` and cleans up on every
+  exit. `READFILE` is defined in `basic1.lisp`, which is read before `debug1.lisp` defines
+  `ERRORSET`, so it catches by hand: its `PROG` carries the label `ERRORSET`, which is
+  exactly what `SYSERROR`'s `(GO* ERRORSET)` looks for.
+- **`EQUAL` compared print names with no type test**, so `(EQUAL "AB" 'AB)` was `T` while
+  `EQ` said `NIL`, and `MEMBER`/`SUBST`/`REMOVE` conflated a string with a literal atom.
+  `GETPN` already returns the discriminator (0 litatom, 1 string or substring), so one
+  comparison closes it. `STREQUAL` requires both arguments to be strings and is unaffected.
+- **The `%` escape did not suppress number recognition.** An escaped character is given
+  type 10, which is the point of the escape -- except that `+`, `-` and the ten digits kept
+  the type that makes `RATOM` treat them as part of a number, so `%5` was the *number* 5 and
+  there was no way to write a literal atom that looks like one. `UsersGuide.txt` says the
+  escape "works the same as in INTERLISP", where `%5` is the litatom `5`. Dropping the
+  exception makes such an atom reachable, so `PRINAT` now has to be able to write one back:
+  it escapes the leading character of a literal atom whose print name would read as a
+  number -- every character a digit, `.`, `+`, `-` or the exponent marker, the first one of
+  the first four, and at least one digit present. That last condition is what keeps the
+  everyday atoms `-`, `+` and `.` printing as themselves, and the leading-character
+  condition is what keeps `E1` and `1ST` printing as themselves.
+
+Deliberately **not** changed:
+
+- **A cut line is continued, not discarded, even when `MARGR` has been narrowed.** Setting
+  `(IOTAB 3 5) (IOTAB 4 30)` looks like a request for a card window with a sequence-number
+  field, but the surplus was never discarded before either -- it became the next card, and
+  its tokens were read. Continuation is a strict improvement on that, and discarding would
+  reintroduce K1 at the default margin of 150.
+- **`IRESOL` stays at 8**, again. Measured this pass: 6 of 120 random 32-bit patterns do
+  not survive `PRIN0`/`READ`, so two different floats can print identically. A
+  shortest-round-trip printer -- print eight digits, re-read, fall back to nine only when
+  the result differs -- would get both, and `RATOM` is reachable from `PRIFLO`'s
+  translation unit, so it is local work if float exactness ever matters more than readable
+  output.
+- **`~` is still honoured inside a string literal on input.** The `"` is supposed to make
+  its contents literal, and `PRINAT`'s string branch assumes exactly that, but the printer
+  fix is what stops files from being written unreadable; changing the reader as well is a
+  separate judgement.
+
 ---
 
 ## File Structure
@@ -1076,11 +1188,29 @@ returns NULL for a closed unit, so every `f4_*` entry point reports failure inst
 5. `read1()` tracks `read_status[lun]` (per unit): 1=reading, 2=at EOL, 3=at EOF
 6. On EOF, `rda1_()` sets `ieof=2`, which `shift_()` detects at L1300
 
-`rda1_()` blank-**pads** every line out to `MARGR`, so nothing downstream can tell a real
-trailing blank from padding. Two consequences worth knowing: a printed form wider than a
-line, split across two lines, comes back with `150 - 78 = 72` blanks embedded in it (which
-is why the printer no longer splits -- I2), and a `%` at the physical end of a line escapes
-a *blank* rather than acting as a delimiter.
+`rda1_()` still blank-**pads** its card out to `MARGR`, but since K1 it also records what
+it really saw, and `shift_()` reads the line rather than the card:
+
+- `rd_lineend` is the column of the last character actually on the line. `shift_()` stops
+  there, so the padding is never delivered as input. Before K1 a string spanning a newline
+  swallowed all of it (`"abc\ndef"` came back 144 characters long), and a `%` at the
+  physical end of a line escaped a *blank* rather than acting as a delimiter.
+- `rd_linecut` says the card filled before the newline arrived. `shift_()` then refills and
+  **continues the same line** instead of delivering an end-of-line, so a token crossing
+  column `MARGR` is one token. Before K1 it silently became two atoms; a 170-column line
+  holding a 140-character atom loaded as a three-element list.
+- The refill is **lazy**: `L1200` hands over the end-of-line first and reads the next card
+  only when a character is actually asked for. An eager refill would swallow a line that
+  something else is about to take -- `MESS` reads the message table straight off `SYSATOMS`
+  with `rda4_()` the moment `IREAD` has finished the atom table, so system generation
+  breaks.
+- `rdpend_()` (lispf42.c, beside `rda1_`) answers "is an unread character of the current
+  line still in `RDBUFF`". `READP` asks; testing `RDPOS > MARGR` instead would call
+  `shift_()` for padding that is not there and block on a fresh read.
+
+Note that a *narrowed* right margin does not discard the surplus of a long line either --
+it is continued, not treated as a card sequence-number field. The surplus was never
+discarded before this change; it simply became the next card.
 
 `shift_()` classifies each character with `getcht_()` at L1150. `CHTAB` holds one character
 per type, so when the upshift option is on (`DREG(4) = T`) a lowercase letter is re-looked-up
@@ -1115,6 +1245,12 @@ Each entry is clamped: the read margins against `IOBUFF`, the print margins agai
 against `MAXLUN` -- and a unit that is not open is refused. A left margin may not pass its
 right margin: `LMARGR > MARGR` made `shift_` read and discard a whole input line per call
 and never yield a character, which swallowed the rest of the session.
+
+`MAKEFILE` sets entries 9 and 10 to 1 000 000 around its own writing and restores them
+afterwards. They used to be set to 1000 and 150, which are *display* limits -- past them
+the printer emits `---` or `...` **instead of** the rest of the structure, and the package
+goes out through the same printer, so anything longer or deeper than that was written
+truncated and reported complete (K2).
 
 `basic.img` sets `MARGR` to 150 and `MARG` to 78. `MARG` is a *layout* limit, not a hard
 one: a single atom or string whose printed form is wider than a line overruns it rather

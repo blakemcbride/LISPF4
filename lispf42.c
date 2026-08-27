@@ -179,6 +179,31 @@ static integer c__36 = 36;
 static integer c__39 = 39;
 static integer c__30 = 30;
 
+/*   K1: THE READER IS A CARD READER: RDA1 FILLS RDBUFF FROM LMARGR TO MARGR
+     AND CALLS THAT A LINE.  A SHORT PHYSICAL LINE WAS BLANK PADDED TO THE
+     MARGIN -- SO A STRING SPANNING A NEWLINE SWALLOWED THE PADDING -- AND A
+     LONG ONE WAS SIMPLY CUT, THE SURPLUS BEING PICKED UP BY THE NEXT CALL AS
+     A FRESH LINE, SO A TOKEN CROSSING COLUMN 150 ARRIVED AS TWO ATOMS WITH NO
+     DIAGNOSTIC.  RDA1 NOW RECORDS WHAT IT ACTUALLY SAW AND SHIFT ACTS ON IT:
+     RD_LINEEND IS THE COLUMN OF THE LAST CHARACTER REALLY ON THE LINE, AND
+     RD_LINECUT SAYS THE LINE WAS LONGER THAN THE CARD, IN WHICH CASE SHIFT
+     REFILLS AND CARRIES ON INSTEAD OF DELIVERING AN END-OF-LINE.  THIS IS
+     TRANSIENT READER STATE: IT DESCRIBES THE CARD IN RDBUFF, WHICH NO IMAGE
+     CARRIES, SO IT DOES NOT BELONG IN THE SAVED COMMON BLOCK.  */
+
+static integer rd_lineend = 0;
+static logical rd_linecut = FALSE_;
+static logical rd_eolsent = FALSE_;
+
+/*  Non-zero while an unread character of the current line is still in
+    RDBUFF.  READP asks, so that skipping the rest of a line does not run
+    off the end of what was really typed and block on a fresh read.  */
+
+integer rdpend_(void)
+{
+    return b_1.rdpos <= b_1.margr && b_1.rdpos <= rd_lineend;
+}
+
 /* ******FLOSOR      (AUX ROUTINES FOR INTERPRETER) */
 /* *********************************************************************** */
 /* *                                                                     * */
@@ -791,8 +816,11 @@ integer equal_(integer *ii, integer *jj)
     extern /* Subroutine */ int apush2_(integer *, integer *);
     static integer in, jn;
     extern integer comppn_(integer *, integer *);
+    extern integer getpn_(integer *, integer *, integer *, integer *);
     extern doublereal gtreal_(integer *, integer *);
     static integer jpe, nodes, budget;
+/*   K8: SCRATCH FOR THE LITATOM/STRING TYPE TEST AT L80. */
+    static integer m1, b1, l1, m2, b2, l2;
     static doublereal d__1;
 
 /* OMMON AND INTEGER DECLARATIONS */
@@ -895,6 +923,15 @@ L70:
     goto L50;
 /*                                      I = LITERAL/STRING */
 L80:
+/*   K8: COMPPN COMPARES PRINT NAMES AND NOTHING ELSE, SO "AB" AND THE ATOM  */
+/*   AB CAME BACK EQUAL WHILE EQ SAID NIL, AND EVERYTHING BUILT ON EQUAL --  */
+/*   MEMBER, SUBST, REMOVE -- CONFLATED THE TWO.  GETPN ALREADY RETURNS THE  */
+/*   DISCRIMINATOR: 0 FOR A LITERAL ATOM, 1 FOR A STRING OR SUBSTRING, -1    */
+/*   FOR SOMETHING THAT IS NEITHER.  STREQUAL IS THE DELIBERATELY TYPE-BLIND */
+/*   COMPARISON AND IS UNAFFECTED.                                           */
+    if (getpn_(&i__, &m1, &b1, &l1) != getpn_(&j, &m2, &b2, &l2)) {
+	goto L60;
+    }
     if (0 == comppn_(&i__, &j)) {
 	goto L50;
     }
@@ -916,6 +953,17 @@ integer get_(integer *j, integer *i__)
     }
     k = carcdr_1.cdr[*j - 1];
 L8:
+/*   K4: E4 MADE THIS LOOP TOLERATE A MALFORMED PROPERTY LIST; IT DID NOT     */
+/*   MAKE IT TERMINATE ON A CIRCULAR ONE, AND RPLACD ON A LITERAL ATOM IS THE */
+/*   PLIST SETTER, SO A RING IS AS EASY TO BUILD HERE AS ANYWHERE.  GET IS    */
+/*   CALLED FROM C (GETPROP, GETD AND THE FUNCTION-CELL LOOKUP) WITH NO ERROR */
+/*   PATH, SO RAISE IBREAK AND ANSWER NIL, THE WAY NCHARS DOES.               */
+    if (f4_break_pending) {
+	f4_break_pending = 0;
+	b_1.errtyp = 26;
+	b_1.ibreak = TRUE_;
+	goto L40;
+    }
     if (k <= a_1.natom || k > a_1.nfreet) {
 	goto L40;
     }
@@ -2728,6 +2776,12 @@ L5210:
     static integer newpos;
     extern /* Subroutine */ int terpri_(void);
     static integer ipl, isi;
+/*   K9 MADE A LITERAL ATOM WHOSE PRINT NAME LOOKS LIKE A NUMBER REACHABLE   */
+/*   (%5 IS NOW THE LITATOM 5, NOT THE NUMBER), SO THE PRINTER HAS TO BE     */
+/*   ABLE TO WRITE ONE BACK.  NUMLIK SAYS THIS ATOM NEEDS A LEADING ESCAPE;  */
+/*   IPL0 AND JB0 ARE THE LENGTH AND BYTE OFFSET THE TEST SCANNED FROM.      */
+    static logical numlik;
+    static integer ipl0, jb0, ndig, jt;
 
 /* ----- */
 
@@ -2809,6 +2863,37 @@ L296:
     if (isi == 2 && b_1.dreg[4] == b_1.nil) {
 	isi = 1;
     }
+/*   DECIDE ONCE, BEFORE THE CHARACTER LOOP, WHETHER THIS LITERAL ATOM WOULD */
+/*   COME BACK AS A NUMBER.  RATOM KEEPS A TOKEN NUMERIC ONLY WHILE EVERY    */
+/*   CHARACTER IS A DIGIT, `.', `+', `-' OR THE EXPONENT MARKER, AND ONLY IF */
+/*   IT STARTS WITH ONE OF THE FIRST FOUR; ANY OTHER CHARACTER TURNS IT INTO */
+/*   A LITATOM ON ITS OWN.  ONE DIGIT MUST BE PRESENT, SO THE EVERYDAY ATOMS */
+/*   `-' AND `.' KEEP PRINTING AS THEMSELVES.                                */
+    numlik = FALSE_;
+    ipl0 = ipl;
+    if (isi == 1 && ipl > 0 && b_1.dreg[4] != b_1.nil) {
+	jb0 = jb;
+	ndig = 0;
+	numlik = TRUE_;
+	i__1 = ipl0;
+	for (i__ = 1; i__ <= i__1; ++i__) {
+	    getch_(b_1.pname, &ic, &jb0);
+	    ++jb0;
+	    jt = getcht_(&ic);
+	    if (jt >= 13 && jt < 23) {
+		++ndig;
+	    } else if (jt != 9 && jt != 11 && jt != 12 && jt != 25) {
+		numlik = FALSE_;
+	    }
+	    if (i__ == 1 && jt != 9 && jt != 11 && jt != 12 && (jt < 13 || jt
+		    >= 23)) {
+		numlik = FALSE_;
+	    }
+	}
+	if (ndig == 0) {
+	    numlik = FALSE_;
+	}
+    }
     if (isi == 1) {
 	goto L300;
     }
@@ -2839,15 +2924,25 @@ L310:
 	case 2:  goto L500;
     }
 L400:
-    if (jj <= 8 || jj == 23) {
+/*   K3: TYPE 24 IS THE RESCUE CHARACTER `~', THE ONE READER-SPECIAL         */
+/*   CHARACTER THIS ESCAPING PASS USED TO LEAVE ALONE -- IN NEITHER BRANCH,  */
+/*   SO NEITHER IN AN ATOM NOR INSIDE A STRING.  SHIFT ACTS ON IT WHEREVER   */
+/*   IT OCCURS, SO ANY DATUM CONTAINING ONE PRINTED BACK AS A `--- USER      */
+/*   BREAK' INSTEAD OF ITSELF, AND MAKEFILE WROTE A FILE LOAD COULD NOT      */
+/*   READ.  AN ESCAPED ONE IS ALREADY HANDLED CORRECTLY ON INPUT (SHIFT'S    */
+/*   L1100 GIVES IT TYPE 10), SO ESCAPING IT HERE CLOSES THE ROUND TRIP.     */
+    if (jj <= 8 || jj == 23 || jj == 24) {
 	goto L600;
     }
     if (jj == 9 && *x == b_1.dotat) {
 	goto L600;
     }
+    if (numlik && ipl == ipl0) {
+	goto L600;
+    }
     goto L700;
 L500:
-    if (jj != 6 && jj != 23) {
+    if (jj != 6 && jj != 23 && jj != 24) {
 	goto L700;
     }
 L600:
@@ -3311,6 +3406,9 @@ integer iread_(integer *n)
 #define s1  ((integer *)&b_1.temp2)  /*  ((integer *)&b_1 + 6)  */
     extern /* Subroutine */ int apush2_(integer *, integer *);
     static integer it, sn;
+/*   K5: THE F- AND A-STACK TOPS AS THEY WERE AT ENTRY, AND A SAFETY COUNTER */
+/*   FOR THE LOOP THAT SWALLOWS THE REST OF AN ABANDONED DATUM.              */
+    static integer ipe, jpe, nswal;
 
 /* OMMON AND INTEGER DECLARATIONS */
 /* OMMON AND INTEGER DECLARATIONS END */
@@ -3327,6 +3425,16 @@ integer iread_(integer *n)
     b_1.brlev = a_1.numadd;
     *brstk = b_1.nil;
     b_1.brflg = b_1.nil;
+/*   K5: I5 ESTABLISHED THE RULE -- APUSH AND FPUSH STOP ONLY AT 100 % FULL, */
+/*   WHILE EVAL REFUSES TO DESCEND ONCE THE A-STACK IS WITHIN MIDDL SLOTS OF */
+/*   FULL, AND THAT MARGIN IS WHAT LEAVES ROOM FOR SYSERROR TO RUN, SO A C   */
+/*   ROUTINE THAT OVERFLOWS MUST HAND THE SPACE BACK ITSELF.  PRIN1 BOUNDS   */
+/*   ITS OWN DEPTH, EQUAL RESTORES JP AND SUBPR RESTORES BOTH; IREAD DID     */
+/*   NEITHER, SO AN OVER-DEEP DATUM RETURNED WITH THE STACK STILL FULL AND   */
+/*   THE SESSION RESET WITH NO MESSAGE THAT NLSETQ COULD CATCH AND NOTHING   */
+/*   FOR ERRORN TO REPORT.                                                   */
+    ipe = b_1.ip;
+    jpe = b_1.jp;
 /*                                      STACK RETURN ADDRESS */
     fpush_(&c__1);
     goto L190;
@@ -3449,6 +3557,25 @@ L390:
 
 /*  PDL OVERFLOW */
 L9000:
+    b_1.ip = ipe;
+    b_1.jp = jpe;
+/*   THE TAIL OF THE DATUM IS STILL IN THE INPUT AND WOULD OTHERWISE ARRIVE  */
+/*   AT TOP LEVEL AS A STREAM OF STRAY CLOSE PARENTHESES.  RATOM TRACKS THE  */
+/*   NESTING ITSELF WHEN CALLED WITH IOP = 1, SO READING ON UNTIL IT COMES   */
+/*   BACK TO THE LEVEL IREAD STARTED AT DISCARDS EXACTLY THE REST OF THIS    */
+/*   DATUM.  CHT = -1 IS END-OF-FILE; THE COUNTER IS A BACKSTOP.             */
+    nswal = 0;
+    while (b_1.brlev > a_1.numadd && b_1.cht != -1 && nswal < a_1.maxint) {
+	++nswal;
+	i__ = ratom_(x, &c__1);
+    }
+    b_1.brlev = a_1.numadd;
+    *brstk = b_1.nil;
+    b_1.brflg = b_1.nil;
+/*   REPORT IT THE WAY EVERY OTHER STACK OVERFLOW IS REPORTED.  THE CALLERS  */
+/*   IN LISPF4 TEST FOR THIS EXACTLY AS THEY TEST SUBPR'S INTERRUPT.         */
+    b_1.errtyp = 12;
+    b_1.ibreak = TRUE_;
     ret_val = b_1.nil;
     return ret_val;
 } /* iread_ */
@@ -3860,7 +3987,10 @@ L1003:
     b_1.pnp[a_1.natomp] = b_1.pnp[a_1.natomp + 1];
 /*                                      NOW CALLED BY RATOM */
 L1100:
-    if (b_1.rdpos > b_1.margr) {
+/*   K1: STOP AT THE END OF WHAT WAS REALLY ON THE LINE, NOT AT THE END OF   */
+/*   THE CARD, SO THE BLANKS RDA1 PADS A SHORT LINE WITH ARE NOT DELIVERED   */
+/*   AS INPUT -- A STRING SPANNING A NEWLINE USED TO SWALLOW ALL OF THEM.    */
+    if (b_1.rdpos > b_1.margr || b_1.rdpos > rd_lineend) {
 	goto L1200;
     }
     b_1.chr = b_1.rdbuff[b_1.rdpos - 1];
@@ -3871,11 +4001,14 @@ L1100:
     if (b_1.cht != 23) {
 	goto L1150;
     }
+/*   K9: AN ESCAPED CHARACTER IS ALPHANUMERIC -- THAT IS WHAT THE ESCAPE IS */
+/*   FOR -- BUT `+', `-' AND THE TEN DIGITS USED TO KEEP THE TYPE THAT MAKES */
+/*   RATOM READ THEM AS PART OF A NUMBER, SO %5 WAS THE NUMBER 5 AND THERE   */
+/*   WAS NO WAY TO WRITE A LITERAL ATOM THAT LOOKS LIKE ONE.  EVERY OTHER    */
+/*   SPECIAL CHARACTER ESCAPED CORRECTLY (%( %" %. %[ %' ALL ROUND-TRIP),    */
+/*   AND INTERLISP READS %5 AS THE LITATOM 5, WHICH IS WHAT USERSGUIDE       */
+/*   PROMISES.  RATOM'S NUMBER SCANNER KEYS ON CHT, SO TYPE 10 IS ENOUGH.    */
     b_1.cht = 10;
-    j = getcht_(&b_1.chr);
-    if (j >= 11 && j < 23) {
-	b_1.cht = j;
-    }
     return 0;
 L1150:
     b_1.cht = getcht_(&b_1.chr);
@@ -3911,6 +4044,17 @@ L1160:
 /*                                      NEW LINE */
 /*                                      ** THIS IS THE ONLY CALL TO RDA1 */
 L1200:
+/*   K1: THE CARD IN RDBUFF IS SPENT.  IF THE LINE IT HELD REALLY ENDED,     */
+/*   HAND OVER THE END-OF-LINE NOW AND READ THE NEXT CARD ONLY WHEN A        */
+/*   CHARACTER IS ACTUALLY ASKED FOR.  READING IT HERE WOULD SWALLOW A LINE  */
+/*   THAT SOMETHING ELSE IS ABOUT TO TAKE: A UNIT SWITCH (INUNIT, IOTAB 1)   */
+/*   OR MESS, WHICH READS THE MESSAGE TABLE STRAIGHT OFF SYSATOMS WITH RDA4  */
+/*   THE MOMENT IREAD HAS FINISHED THE ATOM TABLE.                           */
+    if (! rd_linecut && ! rd_eolsent) {
+	rd_eolsent = TRUE_;
+	b_1.cht = 0;
+	return 0;
+    }
     rda1_(&b_1.lunin, b_1.rdbuff, &c__1, &b_1.margr, &ieof);
 /* DEBUG      WRITE(LUNUTS,1201)(RDBUFF(IIII),IIII=1,6) */
 /* DEBUG1201  FORMAT(' RDBUFF=',6A5) */
@@ -3918,8 +4062,12 @@ L1200:
 	goto L1300;
     }
     b_1.rdpos = b_1.lmargr;
-    b_1.cht = 0;
-    return 0;
+    rd_eolsent = FALSE_;
+/*   THE CARD BEFORE THIS ONE FILLED UP BEFORE ITS LINE ENDED, SO THIS IS A  */
+/*   CONTINUATION OF THAT LINE RATHER THAN A NEW ONE, AND CHT IS LEFT ALONE  */
+/*   SO A PENDING % STILL APPLIES.  DELIVERING AN END-OF-LINE HERE IS WHAT   */
+/*   USED TO SPLIT A TOKEN CROSSING COLUMN MARGR INTO TWO ATOMS.             */
+    goto L1100;
 /*                                      E-O-FILE */
 L1300:
     if (sysgen && b_1.lunin == b_1.lunsys) {
@@ -5799,6 +5947,12 @@ L20:
     b_1.prtpos = 1;
 L40:
     i__ = *i1;
+/*   K1: THE DEFAULT IS "THE CARD IS EXACTLY THE LINE", WHICH IS ALSO WHAT   */
+/*   THE FORTRAN-RUNTIME BRANCH BELOW GIVES: FORMATTED READ HAS NO WAY TO    */
+/*   SAY WHERE THE RECORD ENDED, SO THAT BRANCH KEEPS THE ORIGINAL CARD      */
+/*   BEHAVIOUR.  THE C BRANCH REFINES BOTH VALUES AS IT READS.               */
+    rd_lineend = *i2;
+    rd_linecut = FALSE_;
 #ifdef FORTRAN_LIB
     io___248.ciunit = *lun;
     i__1 = s_rsfe(&io___248);
@@ -5816,12 +5970,21 @@ L40:
     i__1 = e_rsfe();
 #else
     f4_start_read(*lun);
+/*   K1: ASSUME THE LINE FILLS THE CARD UNTIL THE NEWLINE IS SEEN.  THE READ */
+/*   THAT PASSES IT IS THE ONE THAT TURNS F4_AT_LINE_END ON, AND THE NEWLINE */
+/*   ITSELF ARRIVES AS A BLANK, SO THE LAST CHARACTER THAT WAS REALLY ON THE */
+/*   LINE IS THE ONE BEFORE IT.                                              */
+    rd_linecut = TRUE_;
     i__2 = *i1;
     i__3 = *i2;
     for (i__ = i__2; i__ <= i__3 || i__ == i__2; ++i__) {
 	i__1 = f4_read_char(*lun, &card[i__]);
 	if (i__1 != 0)
 	    goto L1;
+	if (rd_linecut && f4_at_line_end(*lun)) {
+	    rd_linecut = FALSE_;
+	    rd_lineend = i__ - 1;
+	}
     }
 #endif
     if (i__1 != 0) {
@@ -5832,6 +5995,8 @@ L40:
 /*             FILE'S LAST LINE HAD NO TERMINATING NEWLINE: BLANK-FILL AND */
 /*             HAND IT OVER NOW, AND REPORT THE EOF ON THE NEXT CALL. */
 L1:
+    rd_linecut = FALSE_;
+    rd_lineend = i__ - 1;
     if (i__ > *i1) {
 	i__1 = *i2;
 	for (k = i__; k <= i__1; ++k) {

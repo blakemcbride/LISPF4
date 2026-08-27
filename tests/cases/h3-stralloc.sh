@@ -17,6 +17,11 @@
 #
 # -a2500 -p3000 is tight enough that the loop below drives a dozen atom-
 # compacting collections; the counter in the transcript proves they happened.
+#
+# PROMPTTEXT answers with a literal atom, not a string, so the two comparisons
+# below are against literal atoms.  They used to be written against strings and
+# passed only because of K8, where EQUAL compared print names with no type test
+# and so called "_" and the atom _ equal.
 
 [ -x "$LISPF4" ] || { echo "interpreter $LISPF4 is not executable"; exit 1; }
 
@@ -30,8 +35,8 @@ cat > drv.lsp <<'LISP'
              (SETQ BAD (ADD1 BAD))))
      (COND ((NULL (EQUAL (STRALLOC 3 (SUBSTRING "abcdef" 4 6)) "ddd"))
              (SETQ BAD (ADD1 BAD))))
-     (COND ((NULL (EQUAL (PROMPTTEXT "&") "_")) (SETQ BAD (ADD1 BAD))))
-     (COND ((NULL (EQUAL (PROMPTTEXT "_") "&")) (SETQ BAD (ADD1 BAD))))
+     (COND ((NULL (EQUAL (PROMPTTEXT "&") (QUOTE _))) (SETQ BAD (ADD1 BAD))))
+     (COND ((NULL (EQUAL (PROMPTTEXT "_") (QUOTE &))) (SETQ BAD (ADD1 BAD))))
      (COND ((LESSP N 4000) (GO LP)))
      (RETURN (LIST (QUOTE CALLS) N (QUOTE BAD) BAD)))
 (QUOTE STILL-ALIVE)

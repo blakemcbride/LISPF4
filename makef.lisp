@@ -26,13 +26,18 @@
                     (PROGN (PRINTL-SP "CAN NOT OPEN" FILE) (RETURN)))
                 (SETQ UNIT (INUNIT FILENR))
                 (IOTAB 2 (IOTAB 4))
+                (SETQ X (ERRORSET '(LOAD-LOOP) NIL))
+                (INUNIT UNIT)
+                (CLOSE FILENR)
+                (COND (X (PRINTL-SP FILE '- 'LOADED) (RETURN FILE))
+                      (T (PRINTL-SP FILE '- 'ABANDONED) (RETURN])
+  
+(LOAD-LOOP
+  [LAMBDA NIL
+          (PROG (X)
            LOOP (SELECTQ
                   (SETQ X (READ))
-                  ((NIL STOP)
-                    (PRINTL-SP FILE '- 'LOADED)
-                    (INUNIT UNIT)
-                    (CLOSE FILENR)
-                    (RETURN FILE))
+                  ((NIL STOP) (RETURN T))
                   (COND (PRINTFLG (PRINT (EVALA X AL)) (GO LOOP))
                         (T (EVALA X AL) (GO LOOP])
   
@@ -126,8 +131,8 @@
                 (REWIND FILENR)
                 (SETQ UNIT (OUTUNIT FILENR))
                 (SETQ GBC (SYSFLAG 1 NIL))
-                (SETQ DEPTH (PRINTLEVEL 150))
-                (SETQ LENGTH (PRINTLENGTH 1000))
+                (SETQ DEPTH (PRINTLEVEL 1000000))
+                (SETQ LENGTH (PRINTLENGTH 1000000))
                 (MAKEF-OUT FILEHEADER FILE)
                 (MAKEF-OUT PRINT (LIST 'QUOTE COMSV))
                 (MAKEF-OUT PRINT (SUBST GENV '&&X ''(VERSION &&X)))
@@ -228,9 +233,9 @@
 )
 (PRINT 'MAKEFFNS)
 (RPAQQ MAKEFFNS
-       (CLOSE CURFILE FILECREATED FILEHEADER LOAD MAKEF-EVAL MAKEF-FNSX 
-              MAKEF-GETPROPS MAKEF-MAPC* MAKEF-OUT MAKEF-PROPX MAKEF-VARSX 
-              MAKEFILE OPEN PP PRETTYPRINT SYSIN SYSOUT))
+       (CLOSE CURFILE FILECREATED FILEHEADER LOAD LOAD-LOOP MAKEF-EVAL 
+              MAKEF-FNSX MAKEF-GETPROPS MAKEF-MAPC* MAKEF-OUT MAKEF-PROPX 
+              MAKEF-VARSX MAKEFILE OPEN PP PRETTYPRINT SYSIN SYSOUT))
 (RPAQQ MAKEFCOMS (MAKE FILE PACKAGE MODIFIED BY BLAKE MCBRIDE))
 (RPAQ MAKEFGENNR 9)
 (PRINT 'MAKEFVARS)

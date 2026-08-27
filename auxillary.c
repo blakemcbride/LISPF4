@@ -105,6 +105,20 @@ void	f4_start_read(int lun)
 		read_status[lun] = 1;
 }
 
+/*  Has the physical line just read really ended?  RDA1 fills its card to the
+    right margin whatever the input looks like, so a short line is blank
+    padded and the surplus of a long one is left in the stream -- and SHIFT
+    could not tell the two apart.  Non-zero here means the newline (or the
+    end of the file) has been passed and everything RDA1 stores from now on
+    is padding; zero means the card filled up first and the line goes on.  */
+
+int	f4_at_line_end(int lun)
+{
+	if (lun < 0  ||  lun >= F4_MAXLUN)
+		return 1;
+	return read_status[lun] != 1;
+}
+
 /*  Next character of the current line, or EOF if end-of-file was reached
     without one.  Returning EOF rather than a blank is what lets f4_read
     distinguish "nothing left to read" from "a line with no terminating
