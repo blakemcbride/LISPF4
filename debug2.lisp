@@ -155,7 +155,7 @@
                       (T (RETURN NIL])
   
 (REMINNAME
-  [LAMBDA (FN TEMP)
+  [LAMBDA (FN ALIAS)
           (COND ((NLISTP FN)
                   [COND ((SETQ ALIAS (GETPROP FN 'ALIAS))
                           [PUTPROP

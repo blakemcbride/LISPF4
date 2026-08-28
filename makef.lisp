@@ -112,7 +112,7 @@
                   (GEN (PACK (LIST FILE 'GENNR)))
                   UNIT FILENR FNSV VARSV COMSV GENV
                   (AL (BINDENV FILE))
-                  GBC DEPTH LENGTH)
+                  GBC TRUNC DEPTH LENGTH DONE)
                 [COND [(NULL (SETQ COMSV (ERRORSET COMS NIL)))
                         (PRINTL-SP "GIVE VALUE TO VARIABLE" COMS)
                         (SET COMS (SETQ COMSV (READ]
@@ -131,64 +131,74 @@
                 (REWIND FILENR)
                 (SETQ UNIT (OUTUNIT FILENR))
                 (SETQ GBC (SYSFLAG 1 NIL))
+                (SETQ TRUNC (SYSFLAG 6 NIL))
                 (SETQ DEPTH (PRINTLEVEL 1000000))
-                (SETQ LENGTH (PRINTLENGTH 1000000))
-                (MAKEF-OUT FILEHEADER FILE)
-                (MAKEF-OUT PRINT (LIST 'QUOTE COMSV))
-                (MAKEF-OUT PRINT (SUBST GENV '&&X ''(VERSION &&X)))
-                (COND (FNSV (SETQ FNSV (DSORT (COPY FNSV)))
-                            (MAKEF-FNSX FNSV)
-                            (MAKEF-OUT PRINT (LIST 'QUOTE FNS))
-                            (MAKEF-OUT RPAQQ FNS FNSV)))
-                (MAKEF-OUT RPAQQ COMS COMSV)
-                (MAKEF-OUT RPAQ GEN GENV)
-                [COND (VARSV (SETQ VARSV (DSORT (COPY VARSV)))
-                             (MAKEF-OUT PRINT (LIST 'QUOTE VARS))
-                             (MAKEF-OUT RPAQQ VARS VARSV)
-                             (MAPC VARSV
-                                   '(LAMBDA
-                                      (X)
-                                      (COND ((LITATOM X)
-                                              (MAKEF-VARSX (LIST X)))
-                                            ((LISTP X)
-                                              (SELECTQ
-                                                (CAR X)
-                                                (FNS 
-						 (MAKEF-FNSX
-                                                       (CDR X)))
-                                                (VARS
-                                                  (MAKEF-VARSX (CDR X)))
-                                                (PROP
-                                                  (MAKEF-PROPX
-                                                    (CADR X)
-                                                    (CDDR X)
-                                                    T))
-                                                (IFPROP
-                                                  (MAKEF-PROPX
-                                                    (CADR X)
-                                                    (CDDR X)))
-                                                (P (MAKEF-MAPC*
-                                                     (CDR X)
-                                                     'PRINT))
-                                                (E (OUTUNIT UNIT)
-                                                   (MAKEF-MAPC*
-                                                     (CDR X)
-                                                     'MAKEF-EVAL)
-                                                   (OUTUNIT FILENR))
-                                                (PROG1
-                                                  (OUTUNIT UNIT)
-                                                  (PRINTL "BAD PRETTYCOM:  " X
-                                                    )
-                                                  (OUTUNIT FILENR]
-                (PRINT 'STOP)
+                (SETQ LENGTH (PRINTLENGTH 10000))
+                (AND (GREATERP LENGTH 10000) (PRINTLENGTH LENGTH))
+                (SETQ DONE (ERRORSET '(MAKEFILE-BODY) T))
                 (REWIND FILENR)
                 (OUTUNIT UNIT)
                 (SYSFLAG 1 GBC)
+                (SYSFLAG 6 TRUNC)
                 (PRINTLEVEL DEPTH)
                 (PRINTLENGTH LENGTH)
                 (CLOSE FILENR)
-                (PRINTL-SP 'MAKEFILE FILE 'COMPLETE.)
-                (RETURN FILE))))
+                (COND (DONE (PRINTL-SP 'MAKEFILE FILE 'COMPLETE.)
+                            (RETURN FILE))
+                      (T (PRINTL-SP 'MAKEFILE FILE 'ABANDONED)
+                         (RETURN))))))
+  
+(MAKEFILE-BODY
+  (LAMBDA NIL
+          (MAKEF-OUT FILEHEADER FILE)
+          (MAKEF-OUT PRINT (LIST 'QUOTE COMSV))
+          (MAKEF-OUT PRINT (SUBST GENV '&&X ''(VERSION &&X)))
+          (COND (FNSV (SETQ FNSV (DSORT (COPY FNSV)))
+                      (MAKEF-FNSX FNSV)
+                      (MAKEF-OUT PRINT (LIST 'QUOTE FNS))
+                      (MAKEF-OUT RPAQQ FNS FNSV)))
+          (MAKEF-OUT RPAQQ COMS COMSV)
+          (MAKEF-OUT RPAQ GEN GENV)
+          [COND (VARSV (SETQ VARSV (DSORT (COPY VARSV)))
+                       (MAKEF-OUT PRINT (LIST 'QUOTE VARS))
+                       (MAKEF-OUT RPAQQ VARS VARSV)
+                       (MAPC VARSV
+                             '(LAMBDA
+                                (X)
+                                (COND ((LITATOM X)
+                                        (MAKEF-VARSX (LIST X)))
+                                      ((LISTP X)
+                                        (SELECTQ
+                                          (CAR X)
+                                          (FNS 
+                                            (MAKEF-FNSX
+                                              (CDR X)))
+                                          (VARS
+                                            (MAKEF-VARSX (CDR X)))
+                                          (PROP
+                                            (MAKEF-PROPX
+                                              (CADR X)
+                                              (CDDR X)
+                                              T))
+                                          (IFPROP
+                                            (MAKEF-PROPX
+                                              (CADR X)
+                                              (CDDR X)))
+                                          (P (MAKEF-MAPC*
+                                               (CDR X)
+                                               'PRINT))
+                                          (E (OUTUNIT UNIT)
+                                             (MAKEF-MAPC*
+                                               (CDR X)
+                                               'MAKEF-EVAL)
+                                             (OUTUNIT FILENR))
+                                          (PROG1
+                                            (OUTUNIT UNIT)
+                                            (PRINTL "BAD PRETTYCOM:  " X
+                                              )
+                                            (OUTUNIT FILENR]
+          (PRINT 'STOP)
+          T))
   
 (OPEN
   (LAMBDA (LFN FILE STATUS FORM)
@@ -235,7 +245,8 @@
 (RPAQQ MAKEFFNS
        (CLOSE CURFILE FILECREATED FILEHEADER LOAD LOAD-LOOP MAKEF-EVAL 
               MAKEF-FNSX MAKEF-GETPROPS MAKEF-MAPC* MAKEF-OUT MAKEF-PROPX 
-              MAKEF-VARSX MAKEFILE OPEN PP PRETTYPRINT SYSIN SYSOUT))
+              MAKEF-VARSX MAKEFILE MAKEFILE-BODY OPEN PP PRETTYPRINT SYSIN 
+              SYSOUT))
 (RPAQQ MAKEFCOMS (MAKE FILE PACKAGE MODIFIED BY BLAKE MCBRIDE))
 (RPAQ MAKEFGENNR 9)
 (PRINT 'MAKEFVARS)

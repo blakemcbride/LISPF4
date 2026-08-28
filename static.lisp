@@ -38,7 +38,7 @@
                      N))))
    
  (GET-STATIC
-   (LAMBDA (N) (GETPROP '**STATIC** N)))
+   (NLAMBDA (N) (GETPROP '**STATIC** N)))
    
  (ADD-STATIC
    (NLAMBDA (N L)

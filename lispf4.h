@@ -78,4 +78,14 @@ extern volatile sig_atomic_t f4_break_pending;
 extern jmp_buf f4_reset;
 extern int     f4_reset_ready;
 
+/*  M2: why the last PRIN1 gave up, when SYSFLAG 6 is NIL and it did --
+    1 depth, 2 length or node budget, 3 an array -- and the figure or the
+    array that goes with it.  PRIN1 sets them; PRIN0's entry in LISPF4
+    turns them into a SYSERROR.  CNAME_ interns a C string as a literal
+    atom for that report.  Both live in lispf42.c beside the printer.  */
+
+extern integer f4_prfail;
+extern integer f4_prfval;
+integer	cname_(const char *s);
+
 #endif	/*  LISPF4_H  */

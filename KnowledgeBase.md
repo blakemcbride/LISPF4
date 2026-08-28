@@ -600,6 +600,77 @@ Deliberately **not** changed:
 
 ---
 
+### Ninth bug-fix pass (2026-08-27)
+
+`Bugs8.md` -- ten defects.  Three are regressions from the eighth pass, and one of those
+made a shipped function fatal.
+
+- **A card reader and a character reader are not the same reader (M1, regression).** K1
+  made `SHIFT` stop at the true end of a line for *every* caller.  That is right for the
+  token scanner, which is what K1 was about, but `SHIFT` is also the "give me the next
+  character" primitive, and there the blank padding `RDA1` pads a short card with is
+  load-bearing.  `READC` at the end of a line fell through the refill twice and returned a
+  character from the *next* line; `RSTRING`, which rewinds the card with `(READPOS 1)` and
+  reads columns 1..N trusting the padding is there, looped forever and took the session
+  down with `--- EOF read from standard input`.  `SHIFT` now records its entry code
+  (`TOKMOD = I != 2`) and applies the line-end stop only for the token scanner (entries 1,
+  3, 4); the card readers (entry 2 -- `READC`, `READP`, `IOTAB 2`, the delimiter skip) get
+  the card again.  `RATOM`'s string opener switched from entry 2 to a new entry 4, which is
+  entry 1's line behaviour without storing the previous character.  K1's own case
+  (`k1-longline`) still passes: the string-across-a-newline path goes through entries 1/3.
+- **A display limit moved is not a serialisation limit removed (M2, regression).** K2
+  raised `MAKEFILE`'s `PRINTLEVEL`/`PRINTLENGTH` from 150/1000 to a million each rather
+  than removing the truncation, so a structure deeper than the free A-stack (`(JP-IP)/5-1`,
+  which depends on `-s`) or longer than the node budget still went out with a literal `...`
+  or `---` and `MAKEFILE` still said `COMPLETE`; worse, a three-element ring now wrote a
+  2.3 MB file that reset the interpreter on `LOAD`.  The fix does not turn on the numbers:
+  **printing for read-back that cannot represent the structure is now an error.**  When
+  `SYSFLAG 6` is off (as `PRIN0`'s second argument sets it, and as `MAKEFILE` now sets it
+  for its whole run), `prin1_` sets `f4_prfail` and raises `ERRTYP 9` where it would have
+  drawn the graphic; `PRIN0`'s entry in `lispf4_()` turns that into a `SYSERROR` whose
+  `ARG` names the limit and the figure in force -- `(PRINTLEVEL 288)` is the A-stack clamp
+  at `-s1500`, and it names the lever (`-s`) that a depth failure needs.  `MAKEFILE` runs
+  its writing under `(ERRORSET '(MAKEFILE-BODY) T)` and reports the file `ABANDONED`
+  instead of `COMPLETE` on any failure.  An array (`#nnn`, which the reader cannot take
+  back) is the same failure (M9), so `MAKEFILE` refuses it rather than writing a variable
+  that reloads as a literal atom.  `SYSERROR` forces `SYSFLAG 6` back on around its own
+  printing so the report of a deep or circular `ARG` cannot itself fail; the reset restores
+  it too (M4).
+- **A function that reclassifies `CHTAB` must hand it back on every exit (M3).** `RSTRING`
+  turns the seven reader-special characters (`( ) [ ] " ' %`) into ordinary letters so it
+  can read a line of free text, and restored them only as the last statement of its `PROG`
+  -- the success path.  Any error in between (a non-numeric `N`, a short line since M1, an
+  interrupt) left them reclassified, and the session could not be recovered because every
+  command that restores them needs a paren to type.  `RSTRING` now runs its body under an
+  `ERRORSET` label, restores `CHTAB` on every exit, and re-raises with `ERRORB` on the
+  failure path.  Same shape as K7.
+- **A reset restores the output unit, not just the input unit (M4).** See the `L1` note
+  under Eval/Apply Loop.
+- **Four one-line Lisp declaration fixes.**  `REMINNAME` (`debug2.lisp`) assigned to a free
+  `ALIAS`, clobbering a user global; its parameter list is now `(FN ALIAS)` and the dead
+  `TEMP` is gone (M5, the mirror of F9).  `EDITS` (`edit.lisp`) did not bind the out-
+  parameter `EXIT-TYPE` that `EDITS-INT` sets, so it -- and `HFIX` -- clobbered a user
+  global; it now wraps the call in `(PROG (EXIT-TYPE) ...)` like `EDITF`/`EDITP` (M6).
+  `GET-STATIC` (`static.lisp`) was a `LAMBDA` in a package of `NLAMBDA`s, so `(GET-STATIC
+  F1)` evaluated its argument and failed; it is now an `NLAMBDA` (M7, the mirror of F8).
+  `SUBSTRING`'s start index treated `0` as "one past the end" while the end index treated
+  `0` as "position 0"; the start test is now `< 0` to match, so `0` is refused for both
+  (M8).
+
+Deliberately **not** changed:
+
+- **The print margins and print limits are not restored at a reset.**  They are user state,
+  and `basic1.lisp` sets the margins at image-build time (`(IOTAB 4 150)`, `(IOTAB 8 78)`),
+  so `L1` cannot recover them from `init1_`'s default of 80 without overriding the image's
+  choice.  Only `LUNUT` and `SYSFLAG 6` -- the state that makes the *result* of the reset
+  unusable -- are restored.
+- **`~` inside a string on input, again.**  Unchanged from the eighth pass.
+- **`MAKEFILE`'s `PRINTLENGTH` default is 10 000, not a million.**  With truncation now an
+  error, a smaller length limit means a ring produces a small file and a loud diagnostic
+  rather than a large one; a variable that legitimately needs more can raise it.
+
+---
+
 ## File Structure
 
 ### C Source Files (the working code)
@@ -836,7 +907,13 @@ register file -- `ARG`, `ARG2`, `ARG3`, `ALIST`, `FORM`, `TEMP1`, `TEMP2`, `TEMP
 anything left set after a reset keeps its structure alive. `REVERSE` accumulates into
 `TEMP1`, and before I3 that turned a single list-space exhaustion on a circular list into
 an unbreakable collect / "List space empty" / reset loop: every reset arrived back at the
-same rooted heap.
+same rooted heap. It restores the reader -- `LUNIN`, `RDPOS`, `CHT`, the prompt -- and,
+since M4, the **output** unit `LUNUT` and `SYSFLAG 6` beside it: output redirected into a
+file by `(OUTUNIT u)` (or by `MAKEFILE`, which resets when it runs out of list space) used
+to stay redirected across a reset, so the terminal went silent and the answers ran on into
+the file. The print margins, the print limits and `CHTAB` are left as the program set them
+-- they are user state, and `basic1.lisp` sets the margins at image-build time so `L1`
+cannot recover them from `init1_`'s defaults.
 
 **L2400** is `SYSERROR`: it conses `(ERRTYP L ARG FORM)` and applies the Lisp-level
 `SYSERROR` to it, so any C-level detour to it has to have `L` (the failing function) and
@@ -1189,12 +1266,25 @@ returns NULL for a closed unit, so every `f4_*` entry point reports failure inst
 6. On EOF, `rda1_()` sets `ieof=2`, which `shift_()` detects at L1300
 
 `rda1_()` still blank-**pads** its card out to `MARGR`, but since K1 it also records what
-it really saw, and `shift_()` reads the line rather than the card:
+it really saw, and `shift_()` reads the line or the card **depending on which caller asked**
+(M1):
 
-- `rd_lineend` is the column of the last character actually on the line. `shift_()` stops
-  there, so the padding is never delivered as input. Before K1 a string spanning a newline
-  swallowed all of it (`"abc\ndef"` came back 144 characters long), and a `%` at the
-  physical end of a line escaped a *blank* rather than acting as a delimiter.
+- The entry code says which. `shift_(2)` is the card-level "give me the next character"
+  primitive -- `READC`, `READP`, `IOTAB 2`, `RATOM`'s delimiter skip -- and it reads the
+  *card*, stopping at `MARGR`, because those callers want the blank padding: `RSTRING`
+  rewinds the card with `(READPOS 1)` and collects columns 1..N trusting it is there.
+  `shift_(1)`, `(3)` and `(4)` are the token scanner -- `RATOM`'s atom, pname and string
+  loops -- and they read the *line*, stopping at `rd_lineend`, because there the padding is
+  not input. `shift_()` records `tokmod = (i != 2)` at entry and `L1100` tests
+  `rdpos > margr || (tokmod && rdpos > rd_lineend)`. K1 stopped *every* entry at
+  `rd_lineend`, so `READC` at the end of a line fell through `L1200` twice and returned a
+  character from the *next* line, and `RSTRING`'s loop -- guarded by `(READPOS)`, which the
+  refill resets to 1 -- never terminated and took the session down with `--- EOF read from
+  standard input` (M1).
+- `rd_lineend` is the column of the last character actually on the line. The token scanner
+  stops there, so the padding is never delivered as a token character. Before K1 a string
+  spanning a newline swallowed all of it (`"abc\ndef"` came back 144 characters long), and
+  a `%` at the physical end of a line escaped a *blank* rather than acting as a delimiter.
 - `rd_linecut` says the card filled before the newline arrived. `shift_()` then refills and
   **continues the same line** instead of delivering an end-of-line, so a token crossing
   column `MARGR` is one token. Before K1 it silently became two atoms; a 170-column line
@@ -1246,11 +1336,26 @@ against `MAXLUN` -- and a unit that is not open is refused. A left margin may no
 right margin: `LMARGR > MARGR` made `shift_` read and discard a whole input line per call
 and never yield a character, which swallowed the rest of the session.
 
-`MAKEFILE` sets entries 9 and 10 to 1 000 000 around its own writing and restores them
-afterwards. They used to be set to 1000 and 150, which are *display* limits -- past them
-the printer emits `---` or `...` **instead of** the rest of the structure, and the package
-goes out through the same printer, so anything longer or deeper than that was written
-truncated and reported complete (K2).
+`MAKEFILE` sets entries 9 and 10 high around its own writing and restores them afterwards.
+K2 raised them from 1000/150 to 1 000 000 each, which moved the truncation cliff but did
+not close it: the effective *depth* limit is `min(PRINTLEVEL, (JP-IP)/IDIV - 1)`, so with
+`PRINTLEVEL` at a million the binding term is the free A-stack and depends on `-s`, and the
+effective *length* limit is the node budget `max(PRNODES, PRINTLENGTH)`, a million once
+`PRINTLENGTH` is raised -- so a ring wrote a 2.3 MB file that reset the interpreter on
+`LOAD`. M2's fix does not rely on the numbers: **truncation while printing for read-back
+is now an error**. `PRIN0`'s second argument sets `SYSFLAG 6` (`DREG(5)`); when it is off
+and `prin1_` would emit `---` or `...` (or `#nnn` for an array, M9), it instead sets
+`f4_prfail`, raises `ERRTYP 9` and unwinds like a keyboard interrupt. `PRIN0`'s entry in
+`lispf4_()` turns that into a `SYSERROR` whose `ARG` names the limit and the figure in
+force (`(PRINTLEVEL 288)` at `-s1500` -- the A-stack clamp, which `PRINTLEVEL` itself
+cannot raise), so `MAKEFILE`'s `ERRORSET` catches it and reports the file `ABANDONED`
+rather than `COMPLETE`. `MAKEFILE` now also turns `SYSFLAG 6` off for its whole run
+(restoring it after), keeps `PRINTLENGTH` at a smaller default (10 000, not a million) so a
+ring produces a bounded file and a loud diagnostic rather than a large one, and runs its
+writing under `(ERRORSET '(MAKEFILE-BODY) T)` so any failure -- printer or otherwise --
+lands on the report/cleanup path. `SYSERROR` itself forces `SYSFLAG 6` back on around its
+own printing (and `L1`, the reset, restores it), so the error report can never itself fail
+to print a deep or circular `ARG`.
 
 `basic.img` sets `MARGR` to 150 and `MARG` to 78. `MARG` is a *layout* limit, not a hard
 one: a single atom or string whose printed form is wider than a line overruns it rather

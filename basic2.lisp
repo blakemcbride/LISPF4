@@ -636,23 +636,30 @@
   
 (RSTRING
   [LAMBDA (N)
-          (SETQ N (OR N 75))
-          (MAPC '(%( %) %[ %] %" %' %%) '(LAMBDA (X) (CHTAB X 10)))
-          (READ)
-          (READPOS 1)
-          (PROG ((ST ""))
-           LOOP (AND (GEQ N (READPOS))
-                     (SETQ ST (CONCAT ST (READC)))
-                     (GO LOOP))
-                (SETQ ST (REVERSE (UNPACK ST)))
-           LOOP2
-                (AND (EQ '%  (CAR ST))
-                     (SETQ ST (CDR ST))
-                     (GO LOOP2))
+          (PROG (RES)
+                [SETQ RES
+                      (PROG ((ST ""))
+                            (SETQ N (OR N 75))
+                            (MAPC '(%( %) %[ %] %" %' %%)
+                                  '(LAMBDA (X) (CHTAB X 10)))
+                            (READ)
+                            (READPOS 1)
+                       LOOP (AND (GEQ N (READPOS))
+                                 (SETQ ST (CONCAT ST (READC)))
+                                 (GO LOOP))
+                            (SETQ ST (REVERSE (UNPACK ST)))
+                       LOOP2
+                            (AND (EQ '%  (CAR ST))
+                                 (SETQ ST (CDR ST))
+                                 (GO LOOP2))
+                            (RETURN (LIST (PACK (REVERSE ST))))
+                       ERRORSET
+                            (RETURN NIL]
                 (MAP '(%( 2 %) 3 %[ 4 %] 5 %" 6 %' 7 %% 23)
                      '(LAMBDA (X) (CHTAB (CAR X) (CADR X)))
                      'CDDR)
-                (RETURN (PACK (REVERSE ST])
+                (COND ((NULL RES) (ERRORB)))
+                (RETURN (CAR RES])
   
 (SAVEDEF
   [LAMBDA (A P)

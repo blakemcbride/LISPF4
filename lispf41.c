@@ -257,6 +257,19 @@ L1:
     carcdr_1.cdr[b_1.nil - 1] = b_1.nil;
 /* *SETC*      CALL SETCAR(T,T) */
     carcdr_1.car[b_1.t - 1] = b_1.t;
+/*   M4: THE RESET PUT THE READER BACK -- LUNIN, RDPOS, THE PROMPT -- AND     */
+/*   LEFT THE PRINTER WHERE THE ABANDONED COMPUTATION HAD IT.  OUTPUT         */
+/*   REDIRECTED INTO A FILE STAYED THERE: THE TERMINAL SHOWED NOTHING BUT    */
+/*   PROMPTS AND SYSTEM MESSAGES, WHICH GO TO LUNUTS ON PURPOSE, AND THE     */
+/*   ANSWERS WENT ON INTO THE FILE.  MAKEFILE REDIRECTS FOR THE WHOLE OF ITS */
+/*   RUN, AND A MAKEFILE THAT RUNS OUT OF LIST SPACE IS EXACTLY WHAT RESETS. */
+/*   RESTORE LUNUT FIRST, SO THE TERPRI BELOW GOES TO THE TERMINAL, AND PUT   */
+/*   SYSFLAG 6 BACK ON -- MAKEFILE TURNS IT OFF TO MAKE TRUNCATION AN ERROR   */
+/*   (M2), AND LEFT OFF IT WOULD MAKE EVERY LATER PRINT OF A DEEP OR         */
+/*   CIRCULAR STRUCTURE AT THE TERMINAL FAIL.  THE MARGINS, THE PRINT        */
+/*   LIMITS, CHTAB AND THE OTHER FLAGS ARE USER STATE AND ARE LEFT ALONE.    */
+    b_1.lunut = b_1.lunuts;
+    b_1.dreg[5] = b_1.t;
     b_1.iflg1 = a_1.numadd;
     terpri_();
     b_1.iflg1 = b_1.nil;
@@ -3526,6 +3539,35 @@ L15030:
     b_1.dreg[4] = b_1.temp1;
     b_1.dreg[1] = b_1.temp2;
     b_1.dreg[6] = b_1.temp3;
+/*                                      ! M2: WITH SYSFLAG 6 OFF, PRIN1 GIVES */
+/*                                      ! UP RATHER THAN WRITE ... OR --- (OR  */
+/*                                      ! #NNN FOR AN ARRAY, M9) INTO OUTPUT  */
+/*                                      ! THAT IS MEANT TO BE READ BACK.  IT  */
+/*                                      ! LEAVES ERRTYP 9 AND SAYS WHY IN     */
+/*                                      ! F4_PRFAIL; REPORT IT HERE, THE WAY  */
+/*                                      ! 15150 SURFACES SUBPR'S INTERRUPT,   */
+/*                                      ! WITH AN ARG THAT NAMES THE LIMIT    */
+/*                                      ! AND THE FIGURE THAT WAS IN FORCE -- */
+/*                                      ! (PRINTLEVEL 288) IS THE A-STACK     */
+/*                                      ! CLAMP AT -S1500, WHICH PRINTLEVEL   */
+/*                                      ! ITSELF CANNOT RAISE.  THE ARG IS    */
+/*                                      ! DELIBERATELY SMALL: SYSERROR PRINTS */
+/*                                      ! IT, AND THE STRUCTURE THAT FAILED   */
+/*                                      ! WOULD FAIL AGAIN.  EVERY INTERMEDIATE*/
+/*                                      ! SITS IN A REGISTER, SO A COLLECTION */
+/*                                      ! INSIDE CONS CANNOT LOSE IT.         */
+    if (f4_prfail != 0) {
+	if (f4_prfail == 3) {
+	    b_1.arg = f4_prfval;
+	} else {
+	    b_1.arg = cname_(f4_prfail == 1 ? "PRINTLEVEL" : "PRINTLENGTH");
+	    b_1.arg2 = mknum_(&f4_prfval);
+	    b_1.arg2 = cons_(&b_1.arg2, &b_1.nil);
+	    b_1.arg = cons_(&b_1.arg, &b_1.arg2);
+	}
+	f4_prfail = 0;
+	goto L2400;
+    }
     goto L998;
 
 /* MAPC = 12220 */
@@ -3703,7 +3745,16 @@ L15160:
 	goto L25030;
     }
     b_1.arg2 = getnum_(&b_1.arg2);
-    if (b_1.arg2 <= 0) {
+/*                                      ! M8: A NEGATIVE INDEX COUNTS BACK   */
+/*                                      ! FROM THE END, FOR BOTH ARGUMENTS.  */
+/*                                      ! 0 USED TO DO SO FOR THE START ONLY, */
+/*                                      ! WHICH MADE (SUBSTRING S 0 6) THE    */
+/*                                      ! EMPTY STRING WHILE (SUBSTRING S 1 0)*/
+/*                                      ! WAS THE SAME AND (SUBSTRING S 2 0)  */
+/*                                      ! WAS NIL.  0 IS NOT A POSITION IN A  */
+/*                                      ! 1-BASED STRING: REFUSE IT, AS THE   */
+/*                                      ! END ARGUMENT ALREADY DID.           */
+    if (b_1.arg2 < 0) {
 	b_1.arg2 = ipl + 1 + b_1.arg2;
     }
     if (b_1.arg2 < 1 || b_1.arg2 > ipl + 1) {

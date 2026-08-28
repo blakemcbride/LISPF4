@@ -80,7 +80,8 @@
   
 (EDITS
   (LAMBDA (S EDCOM)
-          (EDITS-INT S (COPY S) EDCOM)))
+          (PROG (EXIT-TYPE)
+                (RETURN (EDITS-INT S (COPY S) EDCOM)))))
 
 (EDITS-INT
   (LAMBDA (S S-OLD EDCOM)

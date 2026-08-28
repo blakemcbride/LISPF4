@@ -195,6 +195,34 @@ static integer rd_lineend = 0;
 static logical rd_linecut = FALSE_;
 static logical rd_eolsent = FALSE_;
 
+/*  M2: WHY THE LAST PRIN1 GAVE UP, WHEN SYSFLAG 6 IS NIL AND IT DID.
+    0 = IT DID NOT; 1 = THE DEPTH LIMIT (F4_PRFVAL = THE LEVEL IN FORCE,
+    WHICH IS THE SMALLER OF PRINTLEVEL AND WHAT THE A-STACK ALLOWS);
+    2 = THE LENGTH LIMIT OR THE NODE BUDGET (F4_PRFVAL = THE COUNT);
+    3 = AN ARRAY, WHICH HAS NO READABLE FORM (F4_PRFVAL = THE ARRAY).
+    PRIN1 SETS IT AND RAISES ERRTYP 9; PRIN0'S ENTRY IN LISPF4 TURNS IT
+    INTO A SYSERROR WHOSE ARG SAYS WHICH.  TRANSIENT, LIKE THE READER
+    STATE ABOVE: IT DESCRIBES ONE CALL AND NO IMAGE CARRIES IT.  */
+
+integer f4_prfail = 0;
+integer f4_prfval = 0;
+
+/*  Intern a C string as a literal atom, the way READC makes a one-character
+    atom: through ABUFF and MATOM.  Only used from the error paths, where no
+    token is being read.  */
+
+integer cname_(const char *s)
+{
+    extern integer matom_(integer *);
+    integer i, n;
+
+    n = (integer) strlen(s);
+    for (i = 1; i <= n; ++i) {
+	getch_((void *) s, &b_1.abuff[i - 1], &i);
+    }
+    return matom_(&n);
+}
+
 /*  Non-zero while an unread character of the current line is still in
     RDBUFF.  READP asks, so that skipping the rest of a line does not run
     off the end of what was really typed and block on a fresh read.  */
@@ -2235,6 +2263,7 @@ static integer reloc_(integer v, integer nfrepo, integer nfreto,
 
 /* --------------------------------------MAIN ENTRY */
     x = *s;
+    f4_prfail = 0;
     apush2_(&b_1.ip, &b_1.lmarg);
 /*                                      STACK OVERFLOW PREVENTION */
     if (b_1.stack[b_1.ip - 1] == 16) {
@@ -2446,6 +2475,20 @@ L2000:
 /*                                      H1: ONE MORE ITEM AGAINST THE BUDGET */
     ++glnode;
     if (gllev >= levelm && (x > a_1.natom && x <= a_1.nfreet)) {
+/*   M2: A GRAPHIC IN PLACE OF THE REST OF THE STRUCTURE IS A DISPLAY       */
+/*   DECISION AT THE TERMINAL AND A HOLE IN THE DATA IN A FILE THAT IS      */
+/*   GOING TO BE READ BACK.  MAKEFILE WROTE THE HOLE AND SAID "COMPLETE."   */
+/*   WITH SYSFLAG 6 OFF, GIVE UP AND SAY SO INSTEAD: RECORD WHICH LIMIT     */
+/*   AND UNWIND THE WAY A KEYBOARD INTERRUPT DOES.  THE DEPTH LIMIT IN      */
+/*   FORCE IS LEVELM, NOT PRINTLEVEL -- IT IS CLAMPED TO THE A-STACK THAT   */
+/*   IS FREE, SO THE FIGURE REPORTED IS THE ONE -S HAS TO RAISE.            */
+	if (b_1.dreg[5] == b_1.nil) {
+	    f4_prfail = 1;
+	    f4_prfval = levelm;
+	    b_1.errtyp = 9;
+	    b_1.ibreak = TRUE_;
+	    goto L18;
+	}
 	x = -1;
     }
     if (x <= a_1.natom || x > a_1.nfreet) {
@@ -2734,6 +2777,14 @@ L5150:
     if (li < b_1.levell && glnode < glbudg) {
 	goto L5100;
     }
+/*                                      M2: SEE 2000 */
+    if (b_1.dreg[5] == b_1.nil) {
+	f4_prfail = 2;
+	f4_prfval = li >= b_1.levell ? b_1.levell : glbudg;
+	b_1.errtyp = 9;
+	b_1.ibreak = TRUE_;
+	goto L18;
+    }
     x = -2;
     ++b_1.prtpos;
 /*                                      CALL PRINAT */
@@ -2850,6 +2901,17 @@ L200:
 L295:
     if (carcdr_1.car[*x - 1] != b_1.array) {
 	goto L296;
+    }
+/*   M9: #NNN IS NOT SOMETHING THE READER CAN TAKE BACK -- IT COMES IN AS   */
+/*   A LITERAL ATOM -- SO WITH SYSFLAG 6 OFF IT IS A FAILURE LIKE M2'S:     */
+/*   MAKEFILE USED TO WRITE AN ARRAY-VALUED VARIABLE THAT WAY AND REPORT    */
+/*   THE FILE COMPLETE.  PRIN1'S NEXT UNKWOTE ENTRY SEES IBREAK AND UNWINDS. */
+    if (b_1.dreg[5] == b_1.nil) {
+	f4_prfail = 3;
+	f4_prfval = *x;
+	b_1.errtyp = 9;
+	b_1.ibreak = TRUE_;
+	return 0;
     }
     b_1.prbuff[b_1.prtpos - 1] = chars_1.nochar;
     ++b_1.prtpos;
@@ -3726,8 +3788,12 @@ L2060:
     return ret_val;
 /* "                                    START OF STRING. READ */
 /*                                       ALL OF IT. */
+/*                                      ! M1: ENTRY 4 -- THE LINE, NOT THE */
+/*                                      ! CARD, SO A STRING THAT OPENS AT */
+/*                                      ! THE END OF A LINE DOES NOT START */
+/*                                      ! WITH THE CARD'S BLANK PADDING */
 L3000:
-    shift_(&c__2);
+    shift_(&c__4);
     b_1.i1cons = matom_(&c__0);
     i__1 = a_1.maxint;
     for (i__ = 1; i__ <= i__1 || i__ == 1; ++i__) {
@@ -3947,6 +4013,7 @@ L6000:
 
     /* Local variables */
     static integer ieof, j;
+    static logical tokmod;
     extern integer matom_(integer *), getcht_(integer *);
     extern /* Subroutine */ int rew_(integer *), rda1_(integer *, integer *,
 	    integer *, integer *, integer *), mess_(integer *), lspex_(void);
@@ -3957,16 +4024,31 @@ L6000:
 /*     I = 1       STORE PREVIOUS CHAR */
 /*         2       DON'T STORE IT */
 /*         3       STORE IN PNAME */
+/*         4       DON'T STORE IT, BUT READ THE LINE, NOT THE CARD (M1) */
 
 /*     IFLG2 = T   READ FROM PRBUFF   (CALLED BY PACK) */
 /*             NIL READ FROM LUNIN    (CALLED BY RATOM) */
 /* ----- */
+/*   M1: TWO KINDS OF CALLER SHARE THIS ROUTINE, AND THEY WANT DIFFERENT     */
+/*   THINGS AT THE END OF A LINE.  THE TOKEN SCANNER (RATOM'S ATOM AND       */
+/*   STRING LOOPS, ENTRIES 1, 3 AND 4) WANTS THE LINE: THE BLANKS RDA1 PADS  */
+/*   A SHORT CARD WITH ARE NOT INPUT, AND DELIVERING THEM IS WHAT MADE A     */
+/*   STRING SPANNING A NEWLINE 144 CHARACTERS LONG (K1).  THE CARD-LEVEL     */
+/*   READERS (READC, READP, IOTAB 2 -- ENTRY 2) WANT THE CARD: RSTRING       */
+/*   REWINDS IT WITH (READPOS 1) AND COLLECTS COLUMNS 1..N WITH READC,       */
+/*   TRUSTING THAT THE PADDING IS THERE.  K1 STOPPED EVERY ENTRY AT THE END  */
+/*   OF THE LINE, SO READC AT THAT POINT FELL THROUGH 1200 TWICE AND CAME    */
+/*   BACK WITH A CHARACTER FROM THE NEXT LINE, AND RSTRING'S LOOP -- WHOSE   */
+/*   GUARD IS (READPOS), RESET TO 1 BY THE REFILL -- ATE STANDARD INPUT.     */
+/*   THE ENTRY CODE ALREADY SEPARATES THE TWO, SO RECORD IT HERE.            */
+    tokmod = *i__ != 2;
 
 /* L1000: */
     switch (*i__) {
 	case 1:  goto L1001;
 	case 2:  goto L1010;
 	case 3:  goto L1003;
+	case 4:  goto L1010;
     }
 /*                                      STORE PREVIOUS CHAR */
 L1001:
@@ -3990,7 +4072,8 @@ L1100:
 /*   K1: STOP AT THE END OF WHAT WAS REALLY ON THE LINE, NOT AT THE END OF   */
 /*   THE CARD, SO THE BLANKS RDA1 PADS A SHORT LINE WITH ARE NOT DELIVERED   */
 /*   AS INPUT -- A STRING SPANNING A NEWLINE USED TO SWALLOW ALL OF THEM.    */
-    if (b_1.rdpos > b_1.margr || b_1.rdpos > rd_lineend) {
+/*   M1: ... BUT ONLY FOR THE TOKEN SCANNER.  THE CARD READERS GET THE CARD. */
+    if (b_1.rdpos > b_1.margr || (tokmod && b_1.rdpos > rd_lineend)) {
 	goto L1200;
     }
     b_1.chr = b_1.rdbuff[b_1.rdpos - 1];

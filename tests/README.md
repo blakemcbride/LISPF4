@@ -38,7 +38,7 @@ Scratch output lands in `tests/.work/` (gitignored) — `NAME.out` is the raw se
 ## Expected result today
 
 ```
-passed: 98   failed: 0   known failures: 0   unexpected passes: 0
+passed: 108   failed: 0   known failures: 0   unexpected passes: 0
 ```
 
 Everything found so far is fixed, so there are no `.bug` markers left. The driver exits 0
@@ -155,6 +155,27 @@ Because of this, avoid writing cases whose output includes an atom index (an arr
 - `h3-stralloc` changed with K8: `PROMPTTEXT` answers with a literal atom, and the case's
   two comparisons were written against strings. They passed only because `EQUAL` compared
   print names with no type test.
+- The `m`-series covers `Bugs8.md` (M1-M10). M1 and M2 are **regressions from the eighth
+  pass**, so their detectors fail against the *current* pre-fix `lispf4` + `basic.img`, not
+  the shipped `Linux/` pair: `m1-readc`, `m1-rstring`, `m2-makefile-deep` and
+  `m2-makefile-circ`. M3, M4, M5, M6 and M8 are pre-existing and fail against
+  `Linux/lispf4` + `Linux/basic.img` (M5/M6 are `.lisp`-layer, so they need the old image
+  too). `m7-getstatic` cannot be shown against any shipped artifact -- `static.lisp` is an
+  optional package that is *not* in `basic.img`, so the case copies the current, fixed
+  file; it was verified by hand against a `GET-STATIC` reverted to a `LAMBDA` (answers
+  `NIL` through `NLSETQ` instead of the static list). This is the F5-F9 situation one step
+  further out.
+- `m2-makefile-deep` pins `-s1500` in its own invocation, and `k2-makefile-big` now does
+  too (M10): the effective print level is `(JP-IP)/5-1`, so both depend on `-s`, and a
+  change to the default stack would otherwise turn them into different tests. At the pinned
+  stack the 600-level nest is past the ~288-level A-stack clamp and must be reported
+  `ABANDONED` (M2 makes read-back truncation an error), while a 5-level nest round-trips and
+  reports `COMPLETE`. The two structures use different package names (ZZ, YY) so their
+  MAKEFILE messages can be told apart.
+- `m3-rstring-chtab` and `m4-reset-outunit` both turn on the failure and then require a
+  *later* form to behave: `(LIST 1 2 3)` must still read (M3 -- `(` was left a letter), and
+  `42` must appear on the terminal and not in the capture file (M4 -- output was left
+  redirected). Without the later form neither would prove the recovery.
 
 ## Sanitizer status
 
@@ -378,6 +399,25 @@ fails hard on the pre-fix binary, where every float zero came back as the intege
 `xcall_`'s four spine tests were made to agree (two used `NATOMP` where the boundary is
 `NATOM`) with no case: the looser form admitted an unused atom slot, which is in bounds, so
 there is no observable behaviour to detect.
+
+## M-series cases (ninth bug-fix pass, 2026-08-27)
+
+Ten findings from `Bugs8.md`; ten cases (`m9` and `m10` are covered inside `m2-makefile-*`
+and the `-s` pins rather than as standalone cases). Three are regressions from the eighth
+pass -- see the coverage note above for which pre-fix build each fails against.
+
+| Case | What it pins down |
+|---|---|
+| `m1-readc` | `(LIST (READC) (READC) (READC) (READC))` alone on a line answers four blanks and the next line still evaluates -- `READC` reads the card, not the line (M1) |
+| `m1-rstring` | `(SETQ S (RSTRING))` on a short line returns and the session survives, rather than eating standard input (M1) |
+| `m2-makefile-deep` | a 600-level nest through `MAKEFILE` at `-s1500` is `ABANDONED`, not written truncated and reported `COMPLETE`; a 5-level nest round-trips (M2) |
+| `m2-makefile-circ` | a circular package variable is `ABANDONED` and does not produce a runaway file that resets on `LOAD` (M2) |
+| `m3-rstring-chtab` | an error inside `RSTRING` restores `CHTAB`, so `(LIST 1 2 3)` still reads (M3) |
+| `m4-reset-outunit` | `(RESET)` restores `LUNUT`, so a post-reset answer lands on the terminal and not in a redirected file (M4) |
+| `m5-alias` | `(BREAK F)`/`(UNBREAK F)` do not clobber a global `ALIAS` (M5) |
+| `m6-edits-exittype` | `(EDITS ...)` does not clobber a global `EXIT-TYPE` (M6) |
+| `m7-getstatic` | `(GET-STATIC F1)` with `F1` unbound answers the static list rather than raising (M7) |
+| `m8-substring` | `SUBSTRING`'s start index refuses `0` the way the end index does -- `(SUBSTRING "abcdef" 0 6)` is `NIL`, not `""` (M8) |
 
 ## Variance cases
 

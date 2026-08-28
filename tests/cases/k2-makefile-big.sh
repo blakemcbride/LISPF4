@@ -10,6 +10,12 @@
 # rather than lowered: PRIN1's node budget is max(PRNODES, LEVELL, LEVELM), so
 # raising them raises the circular-structure guard with them, and the effective
 # print level is separately clamped to the A-stack that is actually free.
+#
+# M10: that clamp is (JP-IP)/5 - 1, so the 200-level nest needs about
+# -s1005 and this case depends on -s.  Pin it, so that a change to the
+# default stack cannot quietly turn the case into a different test; at
+# -s600 the nest is refused (M2 makes that an ABANDONED rather than a hole
+# in the file), which m2-makefile-deep covers.
 
 [ -x "$LISPF4" ] || { echo "interpreter $LISPF4 is not executable"; exit 1; }
 
@@ -35,7 +41,7 @@ cat > drv.lsp <<'LISP'
 (EXIT)
 LISP
 
-"$LISPF4" "$LISPF4_IMG" < drv.lsp > out.txt 2>&1
+"$LISPF4" -s1500 "$LISPF4_IMG" < drv.lsp > out.txt 2>&1
 st=$?
 rc=0
 
